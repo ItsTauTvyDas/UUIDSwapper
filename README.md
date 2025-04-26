@@ -4,14 +4,15 @@ A velocity plugin for swapping player UUIDs or usernames.
 !!! NOT FINISHED !!!
 
 ## Finished features
-- [x] Swap UUIDs or usernames either by original username or UUID (if offline more, use offline UUIDs)
-- [ ] Use online UUIDs if possible (if server is in offline mode)
+- [x] Swap UUIDs or usernames either by original username or UUID (if offline mode, use offline UUIDs)
+- [ ] Use online UUIDs (offline mode only)
 
 ## TODO
-- [ ] Use online skins
+- [ ] Use online skins (offline mode only)
 - [ ] Swap skins
-- [ ] Set default skin
-- [ ] Randomize usernames if needed
+- [ ] Set default skin (custom skin pack?)
+- [ ] Randomize usernames if needed (maybe skins too?)
+- [ ] Toggle capes/skins (I wonder how capes work in properties)
 
 ## Default configuration:
 Configuration is TOML based and resides in `/plugins/uuid-swapper/config.toml`
