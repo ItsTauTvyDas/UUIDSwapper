@@ -4,12 +4,12 @@ A velocity plugin for swapping player UUIDs or usernames.
 !!! NOT FINISHED !!!
 
 ## Finished features
-- [x] Swap UUIDs or usernames either by original username or UUID (if offline mode, use offline UUIDs)
+- [x] Swap UUIDs and usernames
 - [ ] Use online UUIDs (offline mode only)
 
 ## Use cases
-- When switching from online to offline server mode (no need to transfer user data if it's a small server), though you will need Velocity proxy for this to work
-- Idk, your own purposes
+- When switching from online to offline server mode (no need to transfer user data if it's a small server, you just specify username or offline UUID and set it to online UUID)
+- Idk, your own purposes, the above one was the reason I made this
 
 ## TODO
 - [ ] Use online skins (offline mode only)
