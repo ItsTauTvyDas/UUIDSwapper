@@ -2,6 +2,7 @@ package me.itstautvydas.uuidswapper.config;
 
 import com.google.common.collect.ImmutableMap;
 import com.moandjiezana.toml.Toml;
+import com.velocitypowered.api.proxy.ProxyServer;
 
 import java.util.*;
 
@@ -11,8 +12,10 @@ public class Configuration {
     private Toml config;
     private Toml apiDefaultsConfig;
     private final Map<String, APIConfiguration> apis = new HashMap<>();
+    private final ProxyServer server;
 
-    public Configuration(Toml config) {
+    public Configuration(Toml config, ProxyServer server) {
+        this.server = server;
         reload(config);
     }
 
@@ -29,7 +32,7 @@ public class Configuration {
     }
 
     public boolean areOnlineUUIDsEnabled() {
-        return config.getBoolean("online-uuids.enabled", false);
+        return !server.getConfiguration().isOnlineMode() && config.getBoolean("online-uuids.enabled", false);
     }
 
     private boolean isPlayerExceptional(String value, boolean isUsername) {

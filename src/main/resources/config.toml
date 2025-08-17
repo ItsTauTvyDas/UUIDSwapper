@@ -108,15 +108,28 @@
             [online-uuids.api.response-handlers.conditions]
                 "response::errorMessage" = true
                 #"response.errorMessage" = "Couldn't find any profile with name {username}"
+
+# Override server mode for specific players
+[mode-override]
+    # UUIDs here will depend o nserver's mode
+    # If the server is set to online mode, use online UUIDs, offline otherwise
+    force-online-mode = [
+        #"u:ItsTauTvyDas"
+        #"cfe17913-ebc3-3cfb-9162-99908590f8f2"
+    ]
+    # Useful when server is in online mode, and you want to allow specific offline players
+    # Be sure to havesome kidn of authentification plugin for those players!
+    force-offline-mode = [
+        #"u:ItsTauTvyDas"
+        #"cfe17913-ebc3-3cfb-9162-99908590f8f2"
+    ]
 # UUID swapping
-# If you want to use usernames, add u: prefix
 [swapped-uuids]
     #"u:ItsTauTvyDas" = "96642c39-6de2-3b20-a133-b354dcc36016"
     #"cfe17913-ebc3-3cfb-9162-99908590f8f2" = "aacb3ea4-8b3d-3830-8dc0-11a765a0de3a"
 
 # Set custom player names
 # If you use UUID that has been previously swapped, use here the original
-# For usernames, add u: prefix
 [custom-player-names]
     #"96642c39-6de2-3b20-a133-b354dcc36016" = "Herobrine"
     #"u:Steve" = "Steve1"
