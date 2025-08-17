@@ -1,20 +1,122 @@
 # UUID Swapper by ItsTauTvyDas
 
-# Only works when online mode is set to false
-always-use-online-uuids = false
-
-# Set to true if you still want to swap UUIDs even when always-use-online-uuids is enabled
-swap-uuids = true
-
+[online-uuids] # Only works when online mode is set to false
+    enabled = false
+    # Set to true if you still want to swap UUIDs even when always-use-online-uuids is enabled
+    swap-uuids = true
+    # Choose which API to use to fetch online player's UUID
+    # Predefined available options:
+    #   PlayerDB (https://playerdb.co/)
+    #   MinecraftServices (https://api.minecraftservices.com)
+    use-api = "PlayerDB" # Misspell will be treated as if online UUIDs are not enabled!
+    fallback-apis = [ "MinecraftServices" ]
+    fallback-api-remember-time = 21600 # 6 hours defined in seconds
+    # If defined use-api API fails, then fallbacks-apis is used (one by one if let's say first fails).
+    # Every API used in the process to get UUID, its timeout will add up to a number,
+    # and if that number exceeds max-timeout, then the player will get disconnected
+    max-timeout = 6000
+    [online-uuids.username-changes]
+        check-depending-on-ip-address = true
+        # Do not send a request to the API if the player's username is already in the database
+        no-requests-with-existing-username = true
+    # Filter which players should have their UUID changed to online UUID
+    [online-uuids.exceptions]
+        enabled = false
+        reversed = false # true means players listed below will not get their UUID replaced
+        list = [
+            #"u:PlayerName",
+            #"96642c39-6de2-3b20-a133-b354dcc36016"
+        ]
+    [online-uuids.caching]
+        enabled = true
+        # SQLite is the only driver supported, I'm keepign this setting in case it's going to be implemented in the future
+        driver = "SQLite"
+        name = "players-data.db"
+        [online-uuids.caching.table]
+            use-created-at = true
+            use-updated-at = true
+    # Whatever is specified here, will get copied over to all APIs, unless it's already specified
+    [online-uuids.api-defaults]
+        default-disconnect-message = "Failed to get your online UUID"
+        api-down-disconnect-message = "Failed to get your online UUID (service is down), contact server's administrator!"
+        api-timeout-disconnect-message = "Failed to get your online UUID (service timed out), try again later!"
+        timeout = 3000 # 3 seconds
+        [online-uuids.api-defaults.headers]
+            Accept = "application/json"
+    [[online-uuids.api]]
+        name = "example" # You can use the name in "use-api" setting, keep this unique, or it will get overwritten
+        endpoint = "https://your-api.com/get-uuid/{username}"
+        #request-method = "GET" # Default is GET
+        # If the API returns plain text, leave this empty
+        # Examples how to write the path depending on what JSON looks like:
+        #   "UUID" -> "" (empty string)
+        #   ["UUID"] -> "[0]" (empty string)
+        #   {"key": "UUID"} -> "key"
+        #   {"key": {"key2": "UUID"}} -> "key.key2"
+        #   {"key": ["UUID"]} -> "key[0]"
+        #   {"key": [{"key2": "UUID"}]} -> "key[0].key2"
+        json-path-to-uuid = "path.to[0].uuid" # Optional, default is ""
+        # Sends debug messages to console
+        debug = false # Optional, default is false
+        # Placeholders:
+        #   {response.<json path>} - get value from JSON
+        #   {response::<json path>} - check if JSON path exists and has any value, returns true of false
+        #   {http.code} - returned http code
+        #   {http.header.<header name>} - get header's value
+        #   {http.message} - returned http code's message (e.g., Not Found)
+        #   {username} - player's username
+        #   {uuid} - player's original UUID
+        default-disconnect-message = "Failed to get your online UUID: {response.message}"
+        # If response handlers are not defined and the plugin fails to find the UUID, it will not allow the player to join!
+        # Handlers get executed one by one and checks if at least one of the handlers allows player to join
+        [[online-uuids.api.response-handlers]]
+            allow-player-to-join = true # Optional, default is false
+            #disconnect-message = "..." # Optional. Send a custom disconnect message if allow-player-to-join is set to false
+            # Conditions modes
+            # "OR" - at least one of the specified conditions have to match
+            # "AND" - all the specified conditions have to match
+            conditions-mode = "AND" # Optional, default is "AND"
+            ignore-conditions-case = false # Optional, default is false
+            [online-uuids.api.response-handlers.conditions]
+                # Placeholders are also allowed in value place
+                # If placeholder returns "value", then this handler will decide if player is
+                # allowed to join based on "allow-player-to-join" setting
+                "placeholder" = "value"
+        [online-uuids.api.post-data] # Optional
+            #key = "value"
+        [online-uuids.api.query-data] # Optional
+            #key = "value"
+        [online-uuids.api.headers] # Optional
+            #SomeHeader = "Value"
+    [[online-uuids.api]]
+        name = "PlayerDB"
+        endpoint = "https://playerdb.co/api/player/minecraft/{username}"
+        json-path-to-uuid = "data.player.id"
+        default-disconnect-message = "Failed to get your online UUID: {response.message}"
+        [[online-uuids.api.response-handlers]]
+            # Allow player to join with server's generated UUID if username is not tied to any premium account
+            allow-player-to-join = true
+            [online-uuids.api.response-handlers.conditions]
+                "response.code" = "minecraft.invalid_username"
+    [[online-uuids.api]]
+        name = "MinecraftServices"
+        endpoint = "https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"
+        json-path-to-uuid = "id"
+        default-disconnect-message = "Failed to get your online UUID: {response.errorMessage}"
+        [[online-uuids.api.response-handlers]]
+            allow-player-to-join = true
+            [online-uuids.api.response-handlers.conditions]
+                "response::errorMessage" = true
+                #"response.errorMessage" = "Couldn't find any profile with name {username}"
 # UUID swapping
 # If you want to use usernames, add u: prefix
 [swapped-uuids]
-#"u:ItsTauTvyDas" = "96642c39-6de2-3b20-a133-b354dcc36016"
-#"cfe17913-ebc3-3cfb-9162-99908590f8f2" = "aacb3ea4-8b3d-3830-8dc0-11a765a0de3a"
+    #"u:ItsTauTvyDas" = "96642c39-6de2-3b20-a133-b354dcc36016"
+    #"cfe17913-ebc3-3cfb-9162-99908590f8f2" = "aacb3ea4-8b3d-3830-8dc0-11a765a0de3a"
 
 # Set custom player names
 # If you use UUID that has been previously swapped, use here the original
 # For usernames, add u: prefix
 [custom-player-names]
-#"96642c39-6de2-3b20-a133-b354dcc36016" = "Herobrine"
-#"u:Steve" = "Steve1"
+    #"96642c39-6de2-3b20-a133-b354dcc36016" = "Herobrine"
+    #"u:Steve" = "Steve1"
