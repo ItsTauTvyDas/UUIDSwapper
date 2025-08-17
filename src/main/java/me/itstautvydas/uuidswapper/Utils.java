@@ -2,6 +2,8 @@ package me.itstautvydas.uuidswapper;
 
 import com.google.gson.*;
 import com.velocitypowered.api.util.GameProfile;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -102,5 +104,9 @@ public class Utils {
 
     public static String replacePlaceholders(String string, Map<String, Object> placeholders) {
         return replacePlaceholders(string, placeholders, null, null);
+    }
+
+    public static Component toComponent(String string) {
+        return MiniMessage.miniMessage().deserialize(string);
     }
 }
