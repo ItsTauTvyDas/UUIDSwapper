@@ -11,7 +11,8 @@ public class Configuration {
 
     private Toml config;
     private Toml apiDefaultsConfig;
-    private final Map<String, APIConfiguration> apis = new HashMap<>();
+    private final Map<String, ApiConfiguration> apis = new HashMap<>();
+    private ApiConfiguration defaultApiConfig;
     private final ProxyServer server;
 
     public Configuration(Toml config, ProxyServer server) {
@@ -22,16 +23,21 @@ public class Configuration {
     public void reload(Toml mainConfig) {
         this.config = mainConfig;
         this.apiDefaultsConfig = mainConfig.getTable("online-uuids.api-defaults");
+        this.defaultApiConfig = new ApiConfiguration(this.apiDefaultsConfig);
 
         var list = mainConfig.getTables("online-uuids.api");
         apis.clear();
         if (list != null) {
             for (var api : list)
-                apis.put(api.getString("name"), new APIConfiguration(api));
+                apis.put(api.getString("name"), new ApiConfiguration(api));
         }
     }
 
-    public boolean areOnlineUUIDsEnabled() {
+    public ApiConfiguration getDefaultApi() {
+        return defaultApiConfig;
+    }
+
+    public boolean areOnlineUuidEnabled() {
         return !server.getConfiguration().isOnlineMode() && config.getBoolean("online-uuids.enabled", false);
     }
 
@@ -53,11 +59,23 @@ public class Configuration {
         return isPlayerExceptional(uuid.toString(), false);
     }
 
-    public boolean swapUUIDs() {
+    public boolean stillSwapUuids() {
         return config.getBoolean("online-uuids.swap-uuids", true);
     }
 
-    public Map<String, Object> getSwappedUUIDs() {
+    public boolean isForcedOfflineModeEnabled() {
+        return server.getConfiguration().isOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
+    }
+
+    public boolean isForcedOfflineModeSetByDefault() {
+        return config.getBoolean("forced-offline-mode.forced-by-default", true);
+    }
+
+    public List<String> getForcedOfflineModeExceptions() {
+        return config.getList("forced-offline-mode.exceptions", new ArrayList<>());
+    }
+
+    public Map<String, Object> getSwappedUuids() {
         var table = config.getTable("swapped-uuids");
         if (table == null)
             return EMPTY_MAP;
@@ -79,15 +97,15 @@ public class Configuration {
         return config.getBoolean("online-uuids.exceptions.reversed", false);
     }
 
-    public String getAPIName() {
+    public String getApiName() {
         return config.getString("online-uuids.use-api");
     }
 
-    public List<String> getAPIFallbacks() {
+    public List<String> getApiFallbacks() {
         return config.getList("online-uuids.fallback-apis", new ArrayList<>());
     }
 
-    public APIConfiguration getAPI(String name) {
+    public ApiConfiguration getApi(String name) {
         return apis.get(name);
     }
 
@@ -95,7 +113,11 @@ public class Configuration {
         return config.getLong("max-timeout", 6000L);
     }
 
-    public long getFallbackAPIRememberTime() {
+    public long getMinTimeout() {
+        return config.getLong("min-timeout", 1000L);
+    }
+
+    public long getFallbackApiRememberTime() {
         return config.getLong("fallback-api-remember-time", 21600L);
     }
 
@@ -103,7 +125,7 @@ public class Configuration {
         return config.getBoolean("online-uuids.username-changes.check-depending-on-ip-address", false);
     }
 
-    public class APIConfiguration {
+    public class ApiConfiguration {
         public class ResponseHandler {
             private final Toml config;
 
@@ -116,7 +138,7 @@ public class Configuration {
             }
 
             public String getDisconnectMessage() {
-                return config.getString("disconnect-message", APIConfiguration.this.getDefaultDisconnectMessage());
+                return config.getString("disconnect-message", ApiConfiguration.this.getDefaultDisconnectMessage());
             }
 
             public String getConditionsMode() {
@@ -145,11 +167,10 @@ public class Configuration {
                     if (result == null)
                         result = conditionResult;
                     else
-                        result = switch (getConditionsMode()) {
-                            case "AND" -> result && conditionResult;
-                            case "OR" -> result || conditionResult;
-                            default -> result;
-                        };
+                        if (getConditionsMode().equalsIgnoreCase("and"))
+                            result = result && conditionResult;
+                        else
+                            result = result || conditionResult;
                 }
                 return result;
             }
@@ -158,7 +179,7 @@ public class Configuration {
         private final Toml config;
         private final List<ResponseHandler> handlers = new ArrayList<>();
 
-        public APIConfiguration(Toml config) {
+        public ApiConfiguration(Toml config) {
             this.config = config;
 
             var handlers = config.getTables("online-uuids.api.response-handlers");
@@ -186,58 +207,93 @@ public class Configuration {
         }
 
         public String getEndpoint() {
-            return getAPIString("endpoint");
+            return getApiString("endpoint");
         }
 
         public Long getTimeout() {
-            return getAPILong("timeout");
+            return getApiLong("timeout", 3000L);
         }
 
-        public String getPathToUUID() {
-            return getAPIString("json-path-to-uuid");
+        public String getPathToUuid() {
+            return getApiString("json-path-to-uuid");
         }
 
         public String getDefaultDisconnectMessage() {
-            return getAPIString("default-disconnect-message");
+            return getApiString("default-disconnect-message");
         }
 
         public String getServiceDownDisconnectMessage() {
-            return getAPIString("api-down-disconnect-message");
+            return getApiString("api-down-disconnect-message");
         }
 
         public String getServiceTimedOutDisconnectMessage() {
-            return getAPIString("api-timeout-disconnect-message");
+            return getApiString("api-timeout-disconnect-message");
+        }
+
+        public String getUuidIsBadDisconnectMessage() {
+            return getApiString("bad-uuid-disconnect-message");
+        }
+
+        public String getUnknownErrorDisconnectMessage() {
+            return getApiString("unknown-error-disconnect-message");
         }
 
         public boolean isDebugEnabled() {
-            return getAPIBoolean("debug", false);
+            return getApiBoolean("debug", false);
         }
 
         public Map<String, Object> getRequestHeaders() {
-            return getAPIMap("headers");
+            return getApiMap("headers");
         }
 
         public Map<String, Object> getRequestPostData() {
-            return getAPIMap("post-data");
+            return getApiMap("post-data");
         }
 
         public Map<String, Object> getRequestQueryData() {
-            return getAPIMap("query-data");
+            return getApiMap("query-data");
         }
 
-        private String getAPIString(String path) {
+        public long getExpectedStatusCode() {
+            return getApiLong("expected-status-code", 200L);
+        }
+
+        public String getMethod() {
+            var method = getApiString("method");
+            if (method == null)
+                return "GET";
+            return method;
+        }
+
+        public boolean shouldDisconnectOnServiceDown() {
+            return !getApiBoolean("use-fallbacks.on-api-down", true);
+        }
+
+        public boolean shouldDisconnectOnInvalidUuid() {
+            return !getApiBoolean("use-fallbacks.on-invalid-uuid", true);
+        }
+
+        public boolean shouldDisconnectOnBadUuidPath() {
+            return !getApiBoolean("use-fallbacks.on-bad-uuid-path", true);
+        }
+
+        public boolean shouldDisconnectOnUnknownError() {
+            return !getApiBoolean("use-fallbacks.on-unknown-error", true);
+        }
+
+        private String getApiString(String path) {
             return config.getString(path, apiDefaultsConfig == null ? null : apiDefaultsConfig.getString(path));
         }
 
-        private boolean getAPIBoolean(String path, boolean defaultValue) {
+        private boolean getApiBoolean(String path, boolean defaultValue) {
             return config.getBoolean(path, apiDefaultsConfig == null ? defaultValue : apiDefaultsConfig.getBoolean(path, defaultValue));
         }
 
-        private Long getAPILong(String path) {
-            return config.getLong(path, apiDefaultsConfig == null ? null : apiDefaultsConfig.getLong(path));
+        private Long getApiLong(String path, Long defaultValue) {
+            return config.getLong(path, apiDefaultsConfig == null ? defaultValue : apiDefaultsConfig.getLong(path, defaultValue));
         }
 
-        private Map<String, Object> getAPIMap(String path) {
+        private Map<String, Object> getApiMap(String path) {
             var table = config.getTable(path);
             if (table == null && apiDefaultsConfig != null)
                 table = apiDefaultsConfig.getTable(path);
