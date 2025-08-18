@@ -2,7 +2,7 @@ package me.itstautvydas.uuidswapper.config;
 
 import com.moandjiezana.toml.Toml;
 import me.itstautvydas.uuidswapper.Utils;
-import me.itstautvydas.uuidswapper.enums.ResponseHandlerExecuteTime;
+import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
 
 import java.util.Map;
 
@@ -17,8 +17,8 @@ public class ResponseHandler {
         return config.getBoolean("allow-player-to-join", false);
     }
 
-    public ResponseHandlerExecuteTime getExecuteTime() {
-        return ResponseHandlerExecuteTime.fromString(config.getString("when"), ResponseHandlerExecuteTime.BEFORE_UUID);
+    public ResponseHandlerState getExecuteTime() {
+        return ResponseHandlerState.fromString(config.getString("when"), ResponseHandlerState.BEFORE_UUID);
     }
 
     public String getDisconnectMessage() {
