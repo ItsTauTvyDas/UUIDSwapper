@@ -1,0 +1,61 @@
+package me.itstautvydas.uuidswapper.config;
+
+import com.moandjiezana.toml.Toml;
+import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.enums.ResponseHandlerExecuteTime;
+
+import java.util.Map;
+
+public class ResponseHandler {
+    private final Toml config;
+
+    public ResponseHandler(Toml config) {
+        this.config = config;
+    }
+
+    public boolean isPlayerAllowedToJoin() {
+        return config.getBoolean("allow-player-to-join", false);
+    }
+
+    public ResponseHandlerExecuteTime getExecuteTime() {
+        return ResponseHandlerExecuteTime.fromString(config.getString("when"), ResponseHandlerExecuteTime.BEFORE_UUID);
+    }
+
+    public String getDisconnectMessage() {
+        return Utils.toMessage(config, "disconnect-message");
+    }
+
+    public String getConditionsMode() {
+        return config.getString("conditions-mode", "AND");
+    }
+
+    public boolean ignoreConditionsCase() {
+        return config.getBoolean("ignore-conditions-case", false);
+    }
+
+    public Boolean testConditions(Map<String, Object> placeholders) {
+        var table = config.getTable("conditions");
+        if (table == null)
+            return null;
+        var conditions = table.toMap();
+        Boolean result = null;
+        for (var entry : conditions.entrySet()) {
+            var value = placeholders.get(entry.getKey());
+            if (value == null || entry.getValue() == null)
+                continue;
+            boolean conditionResult;
+            if (ignoreConditionsCase())
+                conditionResult = entry.getValue().toString().equalsIgnoreCase(value.toString());
+            else
+                conditionResult = entry.getValue().equals(value);
+            if (result == null)
+                result = conditionResult;
+            else
+            if (getConditionsMode().equalsIgnoreCase("and"))
+                result = result && conditionResult;
+            else
+                result = result || conditionResult;
+        }
+        return result;
+    }
+}

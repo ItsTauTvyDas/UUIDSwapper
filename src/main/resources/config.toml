@@ -1,25 +1,50 @@
 # UUID Swapper by ItsTauTvyDas.
 
-# Use online UUIDs, only works if server is in offline mode!
+# Database used to cache player data such as fetched online UUID or saved randomized username/UUID!
+[database]
+    # SQLite is the only driver supported, I'm keeping this setting in case it's going to be implemented in the future.
+    # Changing this will do nothing.
+    driver = "SQLite"
+    file = "players-data.db"
+    timeout = 5000
+    # Keep the database connection open for 10 seconds.
+    # If something gets requested from the database, the time counter will reset.
+    # If set to -1, connection will always be kept and 0 won't cache connection at all
+    keep-open-for = 10
+    # Database connection keep-alive check repeat (seconds).
+    # This has no effect if 'keep-open-for' is set below 0 or below.
+    timer-repeat-time = 1
+    # Show when the connection was opened, close and when data was requested.
+    debug = false
+
+# Use online UUIDs for non-premium players
+# If the server is in online mode, enabling this will allow offline players to join!
 [online-uuids]
     enabled = false
     # Set to true if you still want to swap UUIDs even when always-use-online-uuids is enabled.
     swap-uuids = true
-    # Choose which API to use to fetch online player's UUID.
+    # Choose which service to use to fetch online player's UUID.
     # Predefined available options:
     #   PlayerDB (https://playerdb.co/)
     #   MinecraftServices (https://api.minecraftservices.com)
-    use-api = "PlayerDB" # Misspell will be treated as if online UUIDs are not enabled!
-    fallback-apis = [ "MinecraftServices" ]
-    fallback-api-remember-time = 21600 # 6 hours defined in seconds
-    # If defined use-api API fails, then fallbacks-apis is used (one by one if let's say first fails).
-    # Every API used in the process to get UUID, its timeout will add up to a number,
+    use-service = "PlayerDB" # Misspell will be treated as if online UUIDs are not enabled!
+    fallback-services = [ "MinecraftServices" ]
+    fallback-service-remember-time = 21600 # 6 hours defined in seconds
+    # If defined service in 'use-service' fails, then fallbacks-services is used (one by one if let's say first fails).
+    # Every service used in the process to get UUID, its timeout will add up to a number,
     # and if that number exceeds max-timeout, then the player will get disconnected.
     max-timeout = 6000
     min-timeout = 1000
+    # Check if player's UUID uppon joining is online, if so, skip online UUID fetching
+    check-for-online-uuid = true
+    # Send successful messages to console, if a service has debug enabled, this is overriden!
+    send-messages-to-console = true
+    send-error-messages-to-console = true # Warnings are counted too
     [online-uuids.username-changes]
+        # Only works if caching is enabled!
         check-depending-on-ip-address = true
-        # Do not send a request to the API if the player's username is already in the database.
+        ip-address-expire-time = 120 # Keep cache valid depending on IP for 5 days (120 hours)
+        # Do not send a request to the service if the player's username is already in the database.
         no-requests-with-existing-username = true
     # Filter which players should have their UUID changed to online UUID.
     [online-uuids.exceptions]
@@ -31,35 +56,53 @@
         ]
     [online-uuids.caching]
         enabled = true
-        # SQLite is the only driver supported, I'm keepign this setting in case it's going to be implemented in the future.
-        driver = "SQLite"
-        name = "players-data.db"
-        [online-uuids.caching.table]
-            use-created-at = true
-            use-updated-at = true
-    # Whatever is specified here, will get copied over to all APIs, unless it's already specified.
-    [online-uuids.api-defaults]
+        # These settings will only apply on table creation time!
+        use-created-at = true
+        use-updated-at = true
+    # Whatever is specified here, will get copied over to all services, unless it's already specified.
+    [online-uuids.service-defaults]
         #expect-status-code = 200 # Optional, default is 200
-        bad-uuid-disconnect-message = "Failed to get your online UUID (bad UUID), contact server's administrator!"
-        default-disconnect-message = "Failed to get your online UUID" # If this is not defined, multiplayer.disconnect.generic message is used
-        api-down-disconnect-message = "Failed to get your online UUID (service is down), contact server's administrator!"
-        unknown-error-disconnect-message = "Failed to get your online UUID (bad service), contact server's administrator!"
-        api-timeout-disconnect-message = "Failed to get your online UUID (service timed out), try again later!"
+        # Placeholders: (available in the most messages)
+        #   {response.<json path>} - get value from JSON (only available if response body is JSON)
+        #       JSON values that are null will get converted to "[null]".
+        #   {response} - response's body (only available if response is text-based)
+        #   {http.status} - returned HTTP status code.
+        #   {http.url} - service endpoint's URL.
+        #   {http.header.str.<header name>} - get header's value.
+        #   {http.header.raw.<header name>} - get header's value.
+        #   {username} - player's username.
+        #   {uuid} - player's original UUID.
+        #   {new-uuid} - player's fetched UUID.
+        #   {error.class} - get full exception's class.
+        #   {error.class-name} - get simple exception's class.
+        #   {error.message} - get exception's message.
+        #   {took} - how many milliseconds it took to send and receive data.
+        #   {max-timeout} - max timeout from configuration.
+        #   {min-timeout} - min timeout from configuration.
+        #   {timeout-sounter} - same as {took} but including the fallbacks too.
+        #   {timeout-left} - how many milliseconds are left for other fallbacks.
+        bad-uuid-disconnect-message = "<red>Failed to get your online UUID (bad UUID), contact server's administrator!"
+        default-disconnect-message = "<red>Failed to get your online UUID" # If this is not defined, multiplayer.disconnect.generic message is used
+        connection-error-disconnect-message = "<red>Failed to get your online UUID (connection error), contact server's administrator!"
+        service-bad-status-disconnect-message = "<red>Failed to get your online UUID (service returned {http.status}), contact server's administrator!"
+        unknown-error-disconnect-message = "<red>Failed to get your online UUID (unknown error), contact server's administrator!"
+        service-timeout-disconnect-message = "<red>Failed to get your online UUID (service timed out), try again later!"
         timeout = 3000 # 3 seconds
-        [online-uuids.api-defaults.use-fallbacks] # Define when plugin should fallback to other APIs in case of failure, disconnect otherwise
-            on-api-down = true # When API doesn't return status code 200 (or specified one)
+        [online-uuids.service-defaults.use-fallbacks] # Define when the service should fall back to the next service in case of failure, disconnect otherwise
+            on-connection-error = true # When unknown connection error appears
             on-invalid-uuid = true # When failed to parse UUID string
             on-bad-uuid-path = true # When json-path-to-uuid was not found or is incorrect
             on-unknown-error = true # When unhandled exception appears
-        [online-uuids.api-defaults.headers]
+            on-bad-status = false # When service's HTTP status code is not what configuration expected
+        [online-uuids.service-defaults.headers]
             Accept = "application/json"
-    [[online-uuids.api]]
-        name = "example" # You can use the name in "use-api" setting, keep this unique, or it will get overwritten.
-        endpoint = "https://your-api.com/get-uuid/{username}"
+    [[online-uuids.services]]
+        name = "example" # You can use the name in "use-service" setting, keep this unique, or it will get overwritten.
+        endpoint = "https://your-service.com/get-uuid/{username}"
         # Supported methods: GET, POST.
         # If mispelled, GET will be used!.
         request-method = "GET" # Optional, default is GET.
-        # If the API returns plain text, leave this empty.
+        # If the service returns plain text, leave this empty.
         # Examples how to write the path depending on what JSON looks like:
         #   "UUID" -> "" (empty string)
         #   ["UUID"] -> "[0]" (empty string)
@@ -70,29 +113,28 @@
         json-path-to-uuid = "path.to[0].uuid" # Optional, default is ""
         # Sends debug messages to console.
         debug = false # Optional, default is false.
-        # Placeholders:
-        #   {response.<json path>} - get value from JSON (only available if response body is JSON)
-        #       JSON values that are null will get converted to "[null]".
-        #   {response} - response's body (only available if response is text-based)
-        #   {http.code} - returned HTTP status code.
-        #   {http.url} - API url path.
-        #   {http.header.str.<header name>} - get header's value.
-        #   {http.header.raw.<header name>} - get header's value.
-        #   {username} - player's username.
-        #   {uuid} - player's original UUID.
-        #   {new-uuid} - player's fetched UUID.
-        #Default-disconnect-message = "Failed to get your online UUID: {response.message}"
         # If response handlers are not defined and the plugin fails to find the UUID, it will not allow the player to join!
-        # Handlers get executed one by one and checks if at least one of the handlers allows player to join.
-        [[online-uuids.api.response-handlers]]
+        # Handlers get executed depending on the specified order (random otherwise) and checks if at least one of the handlers allows player to join.
+        [[online-uuids.services.response-handlers]]
+            # Since TOML configuration uses HashMap to store keys and values, it's not garuntee to be in order.
+            # If two handlers have the same order number, the placement might be random!
+            order = 1
+            # When to execute this handler. Availabled values:
+            #   BEFORE_UUID - execute before UUID fetching
+            #   AFTER_UUID - execute after UUID was successfully fetched
+            #   AFTER_REQUEST - execute when service response is available
+            #   ON_FALLBACK - execute when fallback service is used
+            #   ON_DISCONNECT - execute when a player is about to disconnect (not by other handlers!)
+            #   ON_CONNECT - execute when a player is about to connect (not by other handlers!)
+            execute = "BEFORE_UUID" # Optional, default is BEFORE_UUID.
             allow-player-to-join = true # Optional, default is false.
-            disconnect-message = "..." # Optional. Send a custom disconnect message if allow-player-to-join is set to false.
+            #disconnect-message = "..." # Optional. Send a custom disconnect message if allow-player-to-join is set to false.
             # Conditions modes:
             # "OR" - at least one of the specified conditions have to match.
             # "AND" - all the specified conditions have to match.
             conditions-mode = "AND" # Optional, default is "AND".
             ignore-conditions-case = false # Optional, default is false
-            [online-uuids.api.response-handlers.conditions]
+            [online-uuids.services.response-handlers.conditions]
                 # Placeholders are also allowed in value place.
                 # If a placeholder returns "value", then this handler will decide if player is
                 # allowed to join based on "allow-player-to-join" setting.
@@ -101,32 +143,41 @@
                 "response.path.to[1].json" = true
                 # If you want to compare it to a boolean, use quotes
                 "response.json.path" = "true"
-        [online-uuids.api.post-data] # Optional.
+        [online-uuids.services.post-data] # Optional.
             #key = "value"
-        [online-uuids.api.query-data] # Optional.
+        [online-uuids.services.query-data] # Optional.
             #key = "value"
-        [online-uuids.api.headers] # Optional.
+        [online-uuids.services.headers] # Optional.
             #SomeHeader = "Value"
-    [[online-uuids.api]]
+    [[online-uuids.services]]
         name = "PlayerDB"
         endpoint = "https://playerdb.co/api/player/minecraft/{username}"
         json-path-to-uuid = "data.player.id"
-        default-disconnect-message = "Failed to get your online UUID: {response.message}"
-        [[online-uuids.api.response-handlers]]
+        [[online-uuids.services.response-handlers]]
             # Allow player to join with server's generated UUID if username is not tied to any premium account.
             allow-player-to-join = true
-            [online-uuids.api.response-handlers.conditions]
+            [online-uuids.services.response-handlers.conditions]
                 "response.code" = "minecraft.invalid_username"
-    [[online-uuids.api]]
+    [[online-uuids.services]]
         name = "MinecraftServices"
         endpoint = "https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"
         json-path-to-uuid = "id"
-        default-disconnect-message = "Failed to get your online UUID: {response.errorMessage}"
-        [[online-uuids.api.response-handlers]]
+        [[online-uuids.services.response-handlers]]
             allow-player-to-join = true
-            [online-uuids.api.response-handlers.conditions]
+            [online-uuids.services.response-handlers.conditions]
                 "response.errorMessage" = true
                 #"response.errorMessage" = "Couldn't find any profile with name {username}"
+
+# Randomize usernames or uuids on join.
+# Enabling this will disable online uuids if enabled!
+[randomizer]
+    enabled = false
+    [randomizer.username]
+        randomize = true
+        save = false
+    [randomizer.uuid]
+        randomize = true
+        save = false
 
 # Force offline mode, only works if the server is in online mode!.
 # Players that try to log in with premium accounts will have their online UUID.
