@@ -14,6 +14,10 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.UuidUtils;
 import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.config.Configuration;
+import me.itstautvydas.uuidswapper.config.ServiceConfiguration;
+import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
+import me.itstautvydas.uuidswapper.helper.ObjectHolder;
+import me.itstautvydas.uuidswapper.helper.ResponseData;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
@@ -21,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
@@ -30,13 +35,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 
 @Plugin(id = "uuid-swapper",
         name = "UUIDSwapper",
         version = BuildConstants.VERSION,
         description = "Swap player names or UUID, use online UUIDs for offline mode!",
         url = "https://itstautvydas.me",
-        authors = {"ItsTauTvyDas"})
+        authors = { "ItsTauTvyDas" })
 public class UUIDSwapper {
 
     private Configuration config;
@@ -44,8 +50,8 @@ public class UUIDSwapper {
     private final Logger logger;
     private final ProxyServer server;
 
-    private String lastAPIUsed;
-    private long lastAPIUsedWhen;
+    private String lastUsedService;
+    private long lastUsedServiceAt;
 
     private final HttpClient client;
 
@@ -72,200 +78,319 @@ public class UUIDSwapper {
         if (Files.notExists(configFile)) {
             try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.toml")) {
                 if (in != null) {
-                    logger.info("Copying new configuration...");
+                    logger.info("Copying configuration file...");
                     Files.copy(in, configFile);
                 }
             }
         }
 
         var toml = new Toml().read(configFile.toFile());
-        config = new Configuration(toml, server);
+        config = new Configuration(toml, this);
 
         logger.info("Configuration loaded.");
-        if (toml.getBoolean("online-uuids.enabled", false) && server.getConfiguration().isOnlineMode())
-            logger.warn("You are trying to use online UUIDs while being in online mode! This will be disabled.");
-        logger.info("Using online UUIDs => {}", config.areOnlineUuidEnabled());
+        logger.info("Using online UUIDs => {}", config.areOnlineUUIDsEnabled());
+
         logger.info("Loaded {} swapped UUIDs.", config.getSwappedUuids().size());
         for (var entry : config.getSwappedUuids().entrySet())
             log(entry);
+
         logger.info("Loaded {} custom player usernames.", config.getCustomPlayerNames().size());
         for (var entry : config.getCustomPlayerNames().entrySet())
             log(entry);
     }
 
+    public EventTask tryFetchUuid(String username, UUID uniqueUuid,
+                                  ObjectHolder<PreLoginEvent.PreLoginComponentResult> eventResult,
+                                  BiObjectHolder<UUID, UUID> newUuid) {
+        if (server.getConfiguration().isOnlineMode())
+            eventResult.set(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+
+        if (config.getCheckForOnlineUuid() && uniqueUuid != null) {
+            var offlineUuid = UuidUtils.generateOfflinePlayerUuid(username);
+            if (!offlineUuid.equals(uniqueUuid)) {
+                if (config.getSendSuccessfulMessagesToConsole())
+                    logger.info("Player {} has online UUID, skipping fetching.", username);
+                return null;
+            }
+        }
+
+        var originalUuid = Utils.requireUuid(username, uniqueUuid); // Pre-1.20.1
+
+        return EventTask.async(() -> {
+            var services = new ArrayList<String>();
+            services.add(config.getServiceName());
+            services.addAll(config.getFallbackServices());
+
+            // Make last used (successful) service first
+            if (lastUsedService != null) {
+                services.remove(0); // Remove use-service because it previously failed
+                services.remove(lastUsedService); // Remove because it will duplicate
+                services.add(0, lastUsedService);
+            }
+
+            var timeoutCounter = 0L;
+            var disconnect = true;
+            String disconnectMessage = null;
+            var placeholders = new HashMap<String, Object>();
+
+            for (int i = 0; i < services.size(); i++) {
+                String name = services.get(i);
+                ServiceConfiguration service = config.getService(name);
+
+                if (i == 1 && config.getSendErrorMessagesToConsole())
+                    logger.warn("Defined service's name in 'use-service' failed, using fallback ones!");
+
+                if (service == null) {
+                    if (config.getSendErrorMessagesToConsole())
+                        logger.warn("Service called '{}' doesn't exist! Skipping", name);
+                    continue;
+                }
+
+                if (i >= 1) {
+                    // Check if fallback service is expired
+                    if (lastUsedServiceAt != 0 && lastUsedServiceAt + config.getFallbackServiceRememberMilliTime() >= System.currentTimeMillis()) {
+                        lastUsedService = null;
+                        lastUsedServiceAt = 0;
+                    } else {
+                        lastUsedService = name;
+                        lastUsedServiceAt = System.currentTimeMillis();
+                    }
+                }
+
+                boolean sendMessages = config.getSendSuccessfulMessagesToConsole() || service.isDebugEnabled();
+                boolean sendErrorMessages = config.getSendErrorMessagesToConsole() || service.isDebugEnabled();
+
+                disconnectMessage = service.getDefaultDisconnectMessage();
+                String prefix = "[" + name + "]:";
+
+                try {
+                    placeholders.clear();
+                    placeholders.put("username", username);
+                    placeholders.put("uuid", originalUuid.toString());
+
+                    String queryString = Utils.replacePlaceholders(Utils.buildDataString(service.getRequestQueryData()), placeholders);
+                    if (service.isDebugEnabled())
+                        logger.info("{} (Debug) {}'s original UUID - {}", prefix, username, originalUuid);
+                    String endpoint = Utils.replacePlaceholders(service.getEndpoint(), placeholders);
+                    HttpRequest.Builder builder = HttpRequest.newBuilder();
+
+                    if (!queryString.isEmpty())
+                        builder.uri(URI.create(endpoint + "?" + queryString));
+                    else
+                        builder.uri(URI.create(endpoint));
+
+                    if (service.getMethod().equalsIgnoreCase("POST"))
+                        builder.POST(HttpRequest.BodyPublishers.ofString(
+                                Utils.replacePlaceholders(Utils.buildDataString(service.getRequestPostData()), placeholders)
+                        ));
+
+                    for (var header : service.getRequestHeaders().entrySet()) {
+                        builder.setHeader(
+                                Utils.replacePlaceholders(header.getKey(), placeholders),
+                                Utils.replacePlaceholders(header.getValue().toString(), placeholders)
+                        );
+                    }
+
+                    long timeout = config.getMaxTimeout() - timeoutCounter;
+                    if (timeout <= config.getMinTimeout()) {
+                        if (service.isDebugEnabled())
+                            logger.warn("{} (Debug) Timed out, current timeout value - {}, min timeout - {}", prefix, timeout, config.getMinTimeout());
+                        disconnectMessage = service.getServiceTimedOutDisconnectMessage();
+                        break;
+                    }
+                    builder.timeout(Duration.ofMillis(Math.min(timeout, service.getTimeout())));
+
+                    HttpRequest request = builder.build();
+
+                    long start = System.currentTimeMillis();
+                    var result = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                            .thenApply(response -> new ResponseData(response, null))
+                            .exceptionally(ex ->
+                                    new ResponseData(
+                                            null, ex instanceof CompletionException && ex.getCause() != null
+                                            ? ex.getCause() : ex)
+                            ).join();
+                    if (result.getException() != null) {
+                        Utils.addExceptionPlaceholders(result.getException(), placeholders);
+                        boolean shouldDisconnect;
+
+                        if (result.getException() instanceof HttpConnectTimeoutException) {
+                            disconnectMessage = service.getServiceTimedOutDisconnectMessage();
+                            shouldDisconnect = true;
+                        } else { // Might handle more exceptions in the future
+                            shouldDisconnect = service.shouldDisconnectOnConnectionError();
+                            disconnectMessage = service.getConnectionErrorDisconnectMessage();
+                        }
+
+                        if (sendErrorMessages)
+                            logger.error("{} Connection error ({}), failed to fetch UUID from the service!",
+                                    prefix, result.getException().getClass().getName());
+                        if (service.isDebugEnabled())
+                            logger.error(result.getException().getMessage(), result.getException());
+
+                        if (shouldDisconnect)
+                            break;
+                        continue;
+                    }
+                    var response = result.getResponse();
+                    long took = System.currentTimeMillis() - start;
+
+                    placeholders.put("http.url", response.uri().toString());
+                    placeholders.put("http.status", String.valueOf(response.statusCode()));
+                    placeholders.put("took", String.valueOf(took));
+                    placeholders.put("max-timeout", String.valueOf(config.getMaxTimeout()));
+                    placeholders.put("min-timeout", String.valueOf(config.getMinTimeout()));
+                    placeholders.put("timeout-counter", String.valueOf(timeoutCounter));
+                    placeholders.put("timeout-left", String.valueOf(timeout));
+
+                    timeoutCounter += took;
+                    if (service.isDebugEnabled())
+                        logger.info("{} (Debug) Took {}ms ({}/{}ms - added up timeout/max timeout) to fetch data.", prefix, took, timeoutCounter, config.getMaxTimeout());
+                    if (response.statusCode() != service.getExpectedStatusCode()) {
+                        if (sendErrorMessages)
+                            logger.error("{} Returned wrong HTTP status code! Got {}, expected {}.",
+                                    prefix, response.statusCode(), service.getExpectedStatusCode());
+                        disconnectMessage = service.getBadStatusDisconnectMessage();
+                        if (service.shouldDisconnectOnBadStatus())
+                            break;
+                        continue;
+                    }
+
+                    Object responseBody;
+                    try {
+                        responseBody = JsonParser.parseString(response.body());
+                    } catch (Exception ex) {
+                        responseBody = response.body();
+                        if (service.isDebugEnabled())
+                            logger.info("{} (Debug) Body does not have valid JSON, parsing as text => {}",
+                                    prefix, responseBody.toString().replaceAll("\\R+", ""));
+                    }
+
+                    for (var entry : response.headers().map().entrySet())
+                        placeholders.put("http.header.str" + entry.getKey().toLowerCase(), String.join(",", entry.getValue()));
+                    for (var entry : response.headers().map().entrySet())
+                        placeholders.put("http.header.raw" + entry.getKey().toLowerCase(), entry.getValue());
+
+                    if (responseBody instanceof JsonElement element)
+                        placeholders.putAll(Utils.extractJsonPaths("response.", element));
+                    else
+                        placeholders.put("response", responseBody.toString());
+
+                    var handler = service.executeResponseHandlers(placeholders);
+                    if (handler != null) {
+                        if (service.isDebugEnabled())
+                            logger.info("{} (Debug) Found valid response handler from the configuration, allowed join? => {}, disconnect message => {}",
+                                    prefix, handler.isPlayerAllowedToJoin(), handler.getDisconnectMessage());
+                        if (handler.isPlayerAllowedToJoin()) {
+                            disconnect = false;
+                            break;
+                        }
+                        disconnectMessage = handler.getDisconnectMessage();
+                        break;
+                    }
+
+                    String uuidString;
+                    try {
+                        if (responseBody instanceof JsonElement element)
+                            uuidString = Utils.getJsonValue(element, service.getPathToUuid());
+                        else
+                            uuidString = responseBody.toString();
+                    } catch (Exception ex) {
+                        Utils.addExceptionPlaceholders(ex, placeholders);
+                        if (sendErrorMessages)
+                            logger.error("{} Failed, invalid JSON path to UUID - {}", prefix, service.getPathToUuid());
+                        if (service.isDebugEnabled())
+                            logger.error(ex.getMessage(), ex);
+                        disconnectMessage = service.getBadUuidDisconnectMessage();
+                        if (service.shouldDisconnectOnBadUuidPath())
+                            break;
+                        continue;
+                    }
+
+                    placeholders.put("new-uuid", uuidString);
+
+                    UUID uuid;
+                    try {
+                        uuid = UUID.fromString(uuidString);
+                    } catch (Exception ex) {
+                        Utils.addExceptionPlaceholders(ex, placeholders);
+                        if (sendErrorMessages)
+                            logger.error("{} Failed to convert '{}' to UUID!", prefix, uuidString.replaceAll("\\R+", ""));
+                        if (service.isDebugEnabled())
+                            logger.error(ex.getMessage(), ex);
+                        disconnectMessage = service.getBadUuidDisconnectMessage();
+                        if (service.shouldDisconnectOnInvalidUuid())
+                            break;
+                        continue;
+                    }
+
+                    newUuid.set(originalUuid, uuid);
+
+                    if (sendMessages)
+                        logger.info("{} UUID successfully fetched for {} => {}", prefix, username, uuid);
+
+                    disconnect = false;
+                    break;
+                } catch (Exception ex) {
+                    Utils.addExceptionPlaceholders(ex, placeholders);
+                    if (sendErrorMessages)
+                        logger.error("{} Unknown error, failed to fetch UUID from the service!", prefix);
+                    if (service.isDebugEnabled())
+                        logger.error(ex.getMessage(), ex);
+                    disconnectMessage = service.getUnknownErrorDisconnectMessage();
+                    if (service.shouldDisconnectOnUnknownError())
+                        break;
+                    // Continue
+                }
+            }
+
+            if (disconnect) {
+                if (disconnectMessage == null)
+                    disconnectMessage = config.getDefaultService().getDefaultDisconnectMessage();
+                if (disconnectMessage != null) {
+                    disconnectMessage = Utils.replacePlaceholders(disconnectMessage, placeholders);
+                    eventResult.set(PreLoginEvent.PreLoginComponentResult.denied(Utils.toComponent(disconnectMessage)));
+                    return;
+                }
+                eventResult.set(PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("multiplayer.disconnect.generic")));
+            }
+        });
+    }
+
     @Subscribe
     public EventTask onPlayerPreLogin(PreLoginEvent event) {
-        if (server.getConfiguration().isOnlineMode()) {
-            if (!config.isForcedOfflineModeEnabled())
+//        if (server.getConfiguration().isOnlineMode()) {
+//            if (!config.isForcedOfflineModeEnabled())
+//                return null;
+//            if (config.isForcedOfflineModeSetByDefault() && !Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
+//                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+//            else if (!config.isForcedOfflineModeSetByDefault() && Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
+//                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+//            return null;
+//        } else {
+            if (!config.areOnlineUUIDsEnabled())
                 return null;
-            if (config.isForcedOfflineModeSetByDefault() && !Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
-                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-            else if (!config.isForcedOfflineModeSetByDefault() && Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
-                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-            return null;
-        } else {
-            UUID originalUUID = event.getUniqueId() == null ?
-                    UuidUtils.generateOfflinePlayerUuid(event.getUsername()) : event.getUniqueId();  // Pre-1.20.1
-            if (!config.areOnlineUuidEnabled())
-                return null;
-            return EventTask.async(() -> {
-                long timeoutCounter = 0;
-                long fallbackAPIRememberTime = config.getFallbackApiRememberTime() * 1000;
-
-                var apis = new ArrayList<String>();
-                apis.add(config.getApiName());
-                apis.addAll(config.getApiFallbacks());
-
-                // Make last used (successful) API first
-                if (lastAPIUsed != null) {
-                    apis.remove(0); // Remove use-api because it previously failed
-                    apis.remove(lastAPIUsed); // Remove because it will duplicate
-                    apis.add(0, lastAPIUsed);
-                }
-
-                boolean disconnect = true;
-                String disconnectMessage = null;
-
-                for (int i = 0; i < apis.size(); i++) {
-                    String name = apis.get(i);
-                    Configuration.ApiConfiguration api = config.getApi(name);
-
-                    if (i == 1) {
-                        logger.warn("Defined API in 'use-api' failed, using fallback ones!");
-                        if (lastAPIUsedWhen != 0 && lastAPIUsedWhen + fallbackAPIRememberTime >= System.currentTimeMillis()) {
-                            lastAPIUsed = null;
-                            lastAPIUsedWhen = 0;
-                        } else {
-                            lastAPIUsed = name;
-                            lastAPIUsedWhen = System.currentTimeMillis();
-                        }
-                    }
-
-                    if (api == null) {
-                        logger.warn("API called '{}' does not exist! Skipping", name);
-                        return;
-                    }
-
-                    disconnectMessage = api.getDefaultDisconnectMessage();
-                    String prefix = "[" + name + "]:";
-
-                    try {
-                        String queryString = Utils.buildDataString(api.getRequestQueryData());
-                        Map<String, Object> placeholders = new HashMap<>();
-                        placeholders.put("username", event.getUsername());
-                        placeholders.put("uuid", originalUUID.toString());
-                        if (api.isDebugEnabled())
-                            logger.info("{} {}'s original UUID - {}", prefix, event.getUsername(), originalUUID);
-                        String endpoint = Utils.replacePlaceholders(api.getEndpoint(), placeholders);
-                        HttpRequest.Builder builder = HttpRequest.newBuilder();
-                        if (!queryString.isEmpty())
-                            builder.uri(URI.create(endpoint + "?" + queryString));
-                        else
-                            builder.uri(URI.create(endpoint));
-                        if (api.getMethod().equalsIgnoreCase("POST"))
-                            builder.POST(HttpRequest.BodyPublishers.ofString(Utils.buildDataString(api.getRequestPostData())));
-                        for (var header : api.getRequestHeaders().entrySet())
-                            builder.setHeader(header.getKey(), header.getValue().toString());
-                        long timeout = config.getMaxTimeout() - timeoutCounter;
-                        if (timeout <= config.getMinTimeout()) {
-                            if (api.isDebugEnabled())
-                                logger.warn("{} Timed out, current timeout value - {}, min timeout - {}", prefix, timeout, config.getMinTimeout());
-                            disconnectMessage = api.getServiceTimedOutDisconnectMessage();
-                            break;
-                        }
-                        builder.timeout(Duration.ofMillis(Math.min(timeout, api.getTimeout())));
-                        HttpRequest request = builder.build();
-                        long start = System.currentTimeMillis();
-                        var result = client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).join();
-                        long took = System.currentTimeMillis() - start;
-                        timeoutCounter += took;
-                        if (api.isDebugEnabled())
-                            logger.info("{} Took {}ms ({}/{} - added up timeout/max timeout) to fetch data.", prefix, took, timeoutCounter, config.getMaxTimeout());
-                        if (result.statusCode() != api.getExpectedStatusCode()) {
-                            if (api.shouldDisconnectOnServiceDown()) {
-                                disconnectMessage = api.getServiceDownDisconnectMessage();
-                                break;
-                            }
-                            continue;
-                        }
-                        Object responseBody;
-                        try {
-                            responseBody = JsonParser.parseString(result.body());
-                        } catch (Exception ex) {
-                            responseBody = result.body();
-                            if (api.isDebugEnabled()) {
-                                logger.info("{} Body does not have valid JSON, parsing as text => {}", prefix, responseBody);
-                            }
-                        }
-                        placeholders.put("http.url", result.uri().toString());
-                        placeholders.put("http.code", Integer.toString(result.statusCode()));
-                        for (var entry : result.headers().map().entrySet())
-                            placeholders.put("http.header.str" + entry.getKey().toLowerCase(), String.join(",", entry.getValue()));
-                        for (var entry : result.headers().map().entrySet())
-                            placeholders.put("http.header.raw" + entry.getKey().toLowerCase(), entry.getValue());
-                        if (responseBody instanceof JsonElement element)
-                            placeholders.putAll(Utils.extractJsonPaths("response.", element));
-                        else
-                            placeholders.put("response", responseBody.toString());
-                        String uuidString;
-                        try {
-                            if (responseBody instanceof JsonElement element)
-                                uuidString = Utils.getJsonValue(element, api.getPathToUuid());
-                            else
-                                uuidString = responseBody.toString();
-                        } catch (Exception ex) {
-                            logger.error("{} Failed, invalid JSON path to UUID - {}", prefix, api.getPathToUuid());
-                            if (api.isDebugEnabled()) logger.error(ex.getMessage(), ex);
-                            if (api.shouldDisconnectOnBadUuidPath()) {
-                                disconnectMessage = api.getUuidIsBadDisconnectMessage();
-                                break;
-                            }
-                            continue;
-                        }
-                        placeholders.put("new-uuid", uuidString);
-                        UUID uuid;
-                        try {
-                            uuid = UUID.fromString(uuidString);
-                        } catch (Exception ex) {
-                            logger.error("{} Failed to convert '{}' to UUID!", prefix, uuidString.replaceAll("\\R+", ""));
-                            if (api.isDebugEnabled()) logger.error(ex.getMessage(), ex);
-                            if (api.shouldDisconnectOnInvalidUuid()) {
-                                disconnectMessage = api.getUuidIsBadDisconnectMessage();
-                                break;
-                            }
-                            continue;
-                        }
-                        fetchedUuids.put(originalUUID, uuid);
-                        logger.info("{} UUID successfully fetched for {} => {}", prefix, event.getUsername(), uuid);
-                        disconnect = false;
-                        break;
-                    } catch (Exception ex) {
-                        logger.error("{} Unknown error, failed to fetch UUID from the API!", prefix);
-                        if (api.isDebugEnabled())
-                            logger.error(ex.getMessage(), ex);
-                        if (api.shouldDisconnectOnUnknownError()) {
-                            disconnectMessage = api.getUnknownErrorDisconnectMessage();
-                            break;
-                        }
-                        // Continue
-                    }
-                }
-
-                if (disconnect) {
-                    if (disconnectMessage == null)
-                        disconnectMessage = config.getDefaultApi().getDefaultDisconnectMessage();
-                    if (disconnectMessage != null) {
-                        event.setResult(PreLoginEvent.PreLoginComponentResult.denied(Utils.toComponent(disconnectMessage)));
-                        return;
-                    }
-                    event.setResult(PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("multiplayer.disconnect.generic")));
-                }
-            });
-        }
+            return tryFetchUuid(
+                    event.getUsername(),
+                    event.getUniqueId(),
+                    new ObjectHolder<>(event.getResult(), event::setResult),
+                    new BiObjectHolder<>(null, null, fetchedUuids::put)
+            );
+//        }
     }
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
+        if (config.areOnlineUUIDsEnabled()) {
+            var originalUuid = Utils.requireUuid(event.getUsername(), event.getGameProfile().getId());
+            var newUuid = fetchedUuids.get(originalUuid);
+            if (newUuid != null) {
+                event.setGameProfile(Utils.createProfile(event.getUsername(), newUuid, event.getGameProfile()));
+                if (!config.stillSwapUuids())
+                    return;
+            }
+        }
+
         var swappedUsernames = config.getCustomPlayerNames();
         var swappedUuids = config.getSwappedUuids();
 
@@ -278,8 +403,19 @@ public class UUIDSwapper {
                 logger.info(" # Username => {}", newUsername);
             if (newUUIDStr != null)
                 logger.info(" # Unique ID => {}", newUUIDStr);
-            var profile = Utils.createProfile(newUsername, newUUIDStr, event.getGameProfile());
-            event.setGameProfile(profile);
+            event.setGameProfile(Utils.createProfile(newUsername, newUUIDStr, event.getGameProfile()));
         }
+    }
+
+    public ProxyServer getServer() {
+        return server;
+    }
+
+    public Logger getLogger() {
+        return logger;
+    }
+
+    public Configuration getConfiguration() {
+        return config;
     }
 }
