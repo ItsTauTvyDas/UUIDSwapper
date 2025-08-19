@@ -1,14 +1,10 @@
-package me.itstautvydas.uuidswapper.cache;
+package me.itstautvydas.uuidswapper.database;
 
 import java.util.UUID;
 
-public record PlayerCache(UUID originalUuid, String username, String address, UUID onlineUuid, Long createdAt, Long updatedAt) {
+public record PlayerCache(UUID originalUuid, String address, UUID onlineUuid, Long createdAt, Long updatedAt) {
     public UUID getOriginalUuid() {
         return originalUuid;
-    }
-
-    public String getUsername() {
-        return username;
     }
 
     public String getAddress() {

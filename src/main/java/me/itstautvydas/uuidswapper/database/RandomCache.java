@@ -1,4 +1,4 @@
-package me.itstautvydas.uuidswapper.cache;
+package me.itstautvydas.uuidswapper.database;
 
 import java.util.UUID;
 
