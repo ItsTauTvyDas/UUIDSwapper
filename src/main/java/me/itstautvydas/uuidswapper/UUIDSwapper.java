@@ -5,20 +5,27 @@ import com.google.gson.JsonParser;
 import com.google.inject.Inject;
 import com.moandjiezana.toml.Toml;
 import com.velocitypowered.api.event.EventTask;
+import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.player.configuration.PlayerConfigurationEvent;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.UuidUtils;
 import me.itstautvydas.BuildConstants;
+import me.itstautvydas.uuidswapper.database.CacheDatabaseManager;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.config.ServiceConfiguration;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ResponseData;
+import net.kyori.adventure.dialog.DialogLike;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -46,9 +53,12 @@ import java.util.concurrent.CompletionException;
 public class UUIDSwapper {
 
     private Configuration config;
+
     private final Path dataDirectory;
+    private Path driversDirectory;
     private final Logger logger;
     private final ProxyServer server;
+    private final CacheDatabaseManager database;
 
     private String lastUsedService;
     private long lastUsedServiceAt;
@@ -56,6 +66,7 @@ public class UUIDSwapper {
     private final HttpClient client;
 
     private final Map<UUID, UUID> fetchedUuids = new HashMap<>();
+    private final Map<UUID, Long> throttlesConnections = new HashMap<>();
 
     @Inject
     public UUIDSwapper(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) throws IOException {
@@ -64,6 +75,12 @@ public class UUIDSwapper {
         this.server = server;
         this.client = HttpClient.newHttpClient();
         reloadConfig();
+        this.database = new CacheDatabaseManager(this);
+    }
+
+    @Subscribe
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        this.database.init();
     }
 
     private void log(Map.Entry<String, Object> entry) {
@@ -71,8 +88,10 @@ public class UUIDSwapper {
     }
 
     public void reloadConfig() throws IOException {
-        if (Files.notExists(dataDirectory))
-            Files.createDirectories(dataDirectory);
+        Files.createDirectories(dataDirectory);
+
+        driversDirectory = dataDirectory.resolve("drivers");
+        Files.createDirectories(driversDirectory);
 
         var configFile = dataDirectory.resolve("config.toml");
         if (Files.notExists(configFile)) {
@@ -102,18 +121,6 @@ public class UUIDSwapper {
     public EventTask tryFetchUuid(String username, UUID uniqueUuid,
                                   ObjectHolder<PreLoginEvent.PreLoginComponentResult> eventResult,
                                   BiObjectHolder<UUID, UUID> newUuid) {
-        if (server.getConfiguration().isOnlineMode())
-            eventResult.set(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-
-        if (config.getCheckForOnlineUuid() && uniqueUuid != null) {
-            var offlineUuid = UuidUtils.generateOfflinePlayerUuid(username);
-            if (!offlineUuid.equals(uniqueUuid)) {
-                if (config.getSendSuccessfulMessagesToConsole())
-                    logger.info("Player {} has online UUID, skipping fetching.", username);
-                return null;
-            }
-        }
-
         var originalUuid = Utils.requireUuid(username, uniqueUuid); // Pre-1.20.1
 
         return EventTask.async(() -> {
@@ -358,26 +365,63 @@ public class UUIDSwapper {
     }
 
     @Subscribe
-    public EventTask onPlayerPreLogin(PreLoginEvent event) {
-//        if (server.getConfiguration().isOnlineMode()) {
-//            if (!config.isForcedOfflineModeEnabled())
-//                return null;
-//            if (config.isForcedOfflineModeSetByDefault() && !Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
-//                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-//            else if (!config.isForcedOfflineModeSetByDefault() && Utils.containsPlayer(config.getForcedOfflineModeExceptions(), event.getUsername(), event.getUniqueId()))
-//                event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-//            return null;
-//        } else {
-            if (!config.areOnlineUUIDsEnabled())
-                return null;
-            return tryFetchUuid(
-                    event.getUsername(),
-                    event.getUniqueId(),
-                    new ObjectHolder<>(event.getResult(), event::setResult),
-                    new BiObjectHolder<>(null, null, fetchedUuids::put)
-            );
-//        }
+    public EventTask onShutdownEvent(ProxyShutdownEvent event) {
+        return EventTask.async(database::shutdown);
     }
+
+    @Subscribe
+    public EventTask onPlayerPreLogin(PreLoginEvent event) {
+        if (!config.areOnlineUUIDsEnabled())
+            return null;
+        if (server.getConfiguration().isOnlineMode())
+            event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
+
+        if (config.getCheckForOnlineUuid() && event.getUniqueId() != null) {
+            var offlineUuid = UuidUtils.generateOfflinePlayerUuid(event.getUsername());
+            if (!offlineUuid.equals(event.getUniqueId())) {
+                if (config.getSendSuccessfulMessagesToConsole())
+                    logger.info("Player {} has online UUID ({}), skipping fetching.", event.getUsername(), event.getUniqueId());
+                return null;
+            }
+        }
+
+        var throttle = config.getServiceConnectionThrottle();
+        if (throttle > 0) {
+            var throttledWhen = throttlesConnections.get(event.getUniqueId());
+            if (throttledWhen != null) {
+                var isThrottled = throttledWhen + throttle > System.currentTimeMillis();
+
+                if (isThrottled) {
+                    if (!config.isConnectionThrottleDialogEnabled()) {
+                        event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
+                                Utils.toComponent(config.getConnectionThrottleDialogMessage())
+                        ));
+                    }
+                    return null;
+                }
+
+                throttlesConnections.entrySet()
+                        .removeIf(next -> next.getValue() + throttle <= System.currentTimeMillis());
+            }
+        }
+        return tryFetchUuid(
+                event.getUsername(),
+                event.getUniqueId(),
+                new ObjectHolder<>(event.getResult(), event::setResult),
+                new BiObjectHolder<>(null, null, fetchedUuids::put)
+        );
+    }
+
+//    @Subscribe
+//    public void onPlayerLogin(PlayerConfigurationEvent event) {
+//        if (config.isConnectionThrottleDialogEnabled())
+//            return;
+//        var throttledWhen = throttlesConnections.get(event.getPlayer().getUniqueId());
+//        if (throttledWhen != null) {
+//            var throttle = config.getServiceConnectionThrottle();
+//            long secondsLeft = ((throttledWhen + throttle) - System.currentTimeMillis()) / 1000;
+//        }
+//    }
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
@@ -417,5 +461,13 @@ public class UUIDSwapper {
 
     public Configuration getConfiguration() {
         return config;
+    }
+
+    public Path getDataDirectory() {
+        return dataDirectory;
+    }
+
+    public Path getDriversDirectory() {
+        return driversDirectory;
     }
 }
