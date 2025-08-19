@@ -1,21 +1,25 @@
 # UUID Swapper by ItsTauTvyDas.
 
-# Database used to cache player data such as fetched online UUID or saved randomized username/UUID!
+# Database used to database player data such as fetched online UUID or saved randomized username/UUID!
 [database]
-    # SQLite is the only driver supported, I'm keeping this setting in case it's going to be implemented in the future.
-    # Changing this will do nothing.
+    enabled = false
+    # Automatically download SQLite JDBC driver
+    download-driver = true
+    # You can also specify download URL, the final file will be renamed to driver's name!
+    #download-link = "https://domain.com/driver.jar"
+    # SQLite JDBC is the only driver supported, I'm keeping this setting in case it's going to be implemented in the future.
     driver = "SQLite"
     file = "players-data.db"
     timeout = 5000
     # Keep the database connection open for 10 seconds.
     # If something gets requested from the database, the time counter will reset.
-    # If set to -1, connection will always be kept and 0 won't cache connection at all
+    # If set to -1, connection will always be kept and 0 - will always initiate new connection on request
     keep-open-for = 10
     # Database connection keep-alive check repeat (seconds).
     # This has no effect if 'keep-open-for' is set below 0 or below.
     timer-repeat-time = 1
     # Show when the connection was opened, close and when data was requested.
-    debug = false
+    debug = true
 
 # Use online UUIDs for non-premium players
 # If the server is in online mode, enabling this will allow offline players to join!
@@ -39,32 +43,41 @@
     check-for-online-uuid = true
     # Send successful messages to console, if a service has debug enabled, this is overriden!
     send-messages-to-console = true
-    send-error-messages-to-console = true # Warnings are counted too
-    [online-uuids.username-changes]
-        # Only works if caching is enabled!
-        check-depending-on-ip-address = true
-        ip-address-expire-time = 120 # Keep cache valid depending on IP for 5 days (120 hours)
-        # Do not send a request to the service if the player's username is already in the database.
-        no-requests-with-existing-username = true
-    # Filter which players should have their UUID changed to online UUID.
-    [online-uuids.exceptions]
+    send-error-messages-to-console = true # Warnings are counted too.
+    # If player connects second time and 2 seconds haven't passed, then they won't be allowed in the server.
+    # Connection throttle does not affect when switched to fallback services.
+    service-connection-throttle = 5000 # Set to 0 to disable
+    service-connection-throttled-message = "UUID service connection throttles, wait {time-left} seconds until you can connect again!"
+    # Show wait dialog for the player (!!! Only works for 1.21.6 players and up !!!)
+    [online-uuids.connection-throttle-dialog]
         enabled = false
-        reversed = false # true means players listed below will not get their UUID replaced.
-        list = [
-            #"u:PlayerName",
-            #"96642c39-6de2-3b20-a133-b354dcc36016"
-        ]
+        dynamic = true # If true, placeholder {time-left} in seconds will be available.
+        title = "UUID service connection throttled!"
+        # If the message is not defined, 'service-connection-throttled-message' is used instead!
+        message = "{time-left} seconds left until you can connect again!"
+        # Show a translatable disconnect message.
+        button = "::{menu.disconnect}"
+        button-location = "TOP" # or BOTTOM.
     [online-uuids.caching]
-        enabled = true
+        # If the database fails to initialize or connect, the cache won't be saved or used!
+        enabled = true # Enable this to cache online UUIDs
+        keep = 7200 # Keep online UUID cache for 5 days (in minutes)
         # These settings will only apply on table creation time!
         use-created-at = true
         use-updated-at = true
+    [online-uuids.username-changes]
+        # Caching must be enabled for this to work!
+        check-depending-on-ip-address = false
+        # Do not send a request to the service if the player's username is already in the database.
+        no-requests-with-existing-username = true
     # Whatever is specified here, will get copied over to all services, unless it's already specified.
     [online-uuids.service-defaults]
         #expect-status-code = 200 # Optional, default is 200
         # Placeholders: (available in the most messages)
         #   {response.<json path>} - get value from JSON (only available if response body is JSON)
         #       JSON values that are null will get converted to "[null]".
+        #   ::{<translatable key>} - show a translatable key to the player, no additional text is allowed!!!
+        #   ::{<translatable key>}${<placeholder>} - if the translatable message contains an argument (%s), you can replace it with this format
         #   {response} - response's body (only available if response is text-based)
         #   {http.status} - returned HTTP status code.
         #   {http.url} - service endpoint's URL.

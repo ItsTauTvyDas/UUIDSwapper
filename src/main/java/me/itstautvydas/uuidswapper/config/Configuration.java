@@ -137,27 +137,40 @@ public class Configuration {
         return config.getBoolean("online-uuids.send-error-messages-to-console", true);
     }
 
-    public String getDatabaseDriverName() {
-        return config.getString("database.driver", "SQLite");
+    public boolean shouldCacheOnlineUuids() {
+        return config.getBoolean("online-uuids.caching.enabled", true) && getDatabaseConfiguration().isDatabaseEnabled();
     }
 
-    public String getDatabaseFileName() {
-        return config.getString("database.file", "players-data.db");
+    public DatabaseConfiguration getDatabaseConfiguration() {
+        return new DatabaseConfiguration(config.getTable("database"), config);
     }
 
-    public long getDatabaseOpenTime() {
-        return Math.max(-1L, config.getLong("database.keep-open-for", 10L));
+    public long getServiceConnectionThrottle() {
+        return config.getLong("online-uuids.service-connection-throttle", 2000L);
     }
 
-    public long getDatabaseTimerRepeat() {
-        return Math.max(1L, config.getLong("database.timer-repeat-time", 10L));
+    public String getServiceConnectionThrottleMessage() {
+        return config.getString("online-uuids.service-connection-throttled-message", "::{multiplayer.disconnect.generic}");
     }
 
-    public boolean isDatabaseDebugEnabled() {
-        return config.getBoolean("database.debug", false);
+    public boolean isConnectionThrottleDialogEnabled() {
+        return false;
+//        return config.getBoolean("online-uuids.connection-throttle-dialog.enabled", true);
     }
 
-    public long getDatabaseTimeout() {
-        return Math.max(1000L, config.getLong("database.timeout", 5000L));
+    public boolean isConnectionThrottleDialogDynamic() {
+        return config.getBoolean("online-uuids.connection-throttle-dialog.dynamic", false);
+    }
+
+    public String getConnectionThrottleDialogMessage() {
+        return config.getString("online-uuids.connection-throttle-dialog.message", "Connecting...");
+    }
+
+    public String getConnectionThrottleDialogTitle() {
+        return config.getString("online-uuids.connection-throttle-dialog.title", "Service connection throttled!");
+    }
+
+    public String getConnectionThrottleDialogButtonText() {
+        return config.getString("online-uuids.connection-throttle-dialog.button", "::{menu.disconnect}");
     }
 }
