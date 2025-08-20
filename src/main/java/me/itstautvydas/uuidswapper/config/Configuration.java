@@ -1,33 +1,31 @@
 package me.itstautvydas.uuidswapper.config;
 
-import com.moandjiezana.toml.Toml;
-import me.itstautvydas.uuidswapper.loader.UUIDSwapperVelocity;
+import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.CrossPlatformImplementation;
 import me.itstautvydas.uuidswapper.Utils;
 
 import java.util.*;
 
 public class Configuration {
-    private Toml config;
     private final Map<String, ServiceConfiguration> services = new HashMap<>();
     private ServiceConfiguration defaultServiceConfig;
-    private final UUIDSwapperVelocity plugin;
+    private ConfigurationWrapper config;
 
-    public Configuration(Toml config, UUIDSwapperVelocity plugin) {
-        this.plugin = plugin;
-        reload(config);
+    public Configuration() {
+        reload();
     }
 
-    public void reload(Toml config) {
-        var serviceDefaults = config.getTable("online-uuids.service-defaults");
-
-        this.config = config;
+    public void reload() {
+        this.config = CrossPlatformImplementation.getCurrent().getConfig();
+        var serviceDefaults = config.getSection("online-uuids.service-defaults");
         this.defaultServiceConfig = new ServiceConfiguration(serviceDefaults);
 
         services.clear();
-        var list = Utils.getTablesWithDefaults("online-uuids.services", config, serviceDefaults);
+//        var list = Utils.getTablesWithDefaults("online-uuids.services", config, serviceDefaults);
+        var list = config.getSections("online-uuids.services", serviceDefaults);
         if (list != null) {
             for (var service : list) {
-                if (service.containsPrimitive("name") && service.containsPrimitive("endpoint"))
+                if (service.contains("name") && service.contains("endpoint"))
                     services.put(service.getString("name"), new ServiceConfiguration(service));
             }
         }
@@ -64,7 +62,7 @@ public class Configuration {
     }
 
     public boolean isForcedOfflineModeEnabled() {
-        return plugin.getServer().getConfiguration().isOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
+        return CrossPlatformImplementation.getCurrent().isServerOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
     }
 
     public boolean isForcedOfflineModeSetByDefault() {
@@ -76,14 +74,14 @@ public class Configuration {
     }
 
     public Map<String, Object> getSwappedUuids() {
-        var table = config.getTable("swapped-uuids");
+        var table = config.getSection("swapped-uuids");
         if (table == null)
             return Utils.EMPTY_MAP;
         return table.toMap();
     }
 
     public Map<String, Object> getCustomPlayerNames() {
-        var table = config.getTable("custom-player-names");
+        var table = config.getSection("custom-player-names");
         if (table == null)
             return Utils.EMPTY_MAP;
         return table.toMap();
@@ -142,7 +140,7 @@ public class Configuration {
     }
 
     public DatabaseConfiguration getDatabaseConfiguration() {
-        return new DatabaseConfiguration(config.getTable("database"), config);
+        return new DatabaseConfiguration(config.getSection("database"), config);
     }
 
     public long getServiceConnectionThrottle() {

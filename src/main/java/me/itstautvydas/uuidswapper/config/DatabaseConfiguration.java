@@ -1,12 +1,12 @@
 package me.itstautvydas.uuidswapper.config;
 
-import com.moandjiezana.toml.Toml;
+import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
 
 public class DatabaseConfiguration {
-    private final Toml config;
-    private final Toml mainConfig;
+    private final ConfigurationWrapper config;
+    private final ConfigurationWrapper mainConfig;
 
-    public DatabaseConfiguration(Toml config, Toml mainConfig) {
+    public DatabaseConfiguration(ConfigurationWrapper config, ConfigurationWrapper mainConfig) {
         this.config = config;
         this.mainConfig = mainConfig;
     }

@@ -1,0 +1,5 @@
+name: UUIDSwapper
+main: me.itstautvydas.uuidswapper.loader.UUIDSwapperBungeeCord
+version: 1.0.0
+author: ItsTauTvyDas
+website: https://itstautvydas.me

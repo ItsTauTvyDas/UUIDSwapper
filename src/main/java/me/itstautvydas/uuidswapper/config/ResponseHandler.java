@@ -2,14 +2,15 @@ package me.itstautvydas.uuidswapper.config;
 
 import com.moandjiezana.toml.Toml;
 import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
 import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
 
 import java.util.Map;
 
 public class ResponseHandler {
-    private final Toml config;
+    private final ConfigurationWrapper config;
 
-    public ResponseHandler(Toml config) {
+    public ResponseHandler(ConfigurationWrapper config) {
         this.config = config;
     }
 
@@ -34,7 +35,7 @@ public class ResponseHandler {
     }
 
     public Boolean testConditions(Map<String, Object> placeholders) {
-        var table = config.getTable("conditions");
+        var table = config.getSection("conditions");
         if (table == null)
             return null;
         var conditions = table.toMap();

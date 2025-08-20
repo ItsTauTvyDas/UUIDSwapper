@@ -2,6 +2,7 @@ package me.itstautvydas.uuidswapper.config;
 
 import com.moandjiezana.toml.Toml;
 import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,13 +10,13 @@ import java.util.Map;
 
 public class ServiceConfiguration {
 
-    private final Toml config;
+    private final ConfigurationWrapper config;
     private final List<ResponseHandler> handlers = new ArrayList<>();
 
-    public ServiceConfiguration(Toml config) {
+    public ServiceConfiguration(ConfigurationWrapper config) {
         this.config = config;
 
-        var handlers = config.getTables("online-uuids.services.response-handlers");
+        var handlers = config.getSections("online-uuids.services.response-handlers");
         if (handlers != null) {
             for (var handler : handlers)
                 this.handlers.add(new ResponseHandler(handler));
@@ -91,15 +92,15 @@ public class ServiceConfiguration {
     }
 
     public Map<String, Object> getRequestHeaders() {
-        return Utils.getTableOrEmpty(config, "headers");
+        return config.getMap("headers", true);
     }
 
     public Map<String, Object> getRequestPostData() {
-        return Utils.getTableOrEmpty(config, "post-data");
+        return config.getMap("post-data", true);
     }
 
     public Map<String, Object> getRequestQueryData() {
-        return Utils.getTableOrEmpty(config, "query-data");
+        return config.getMap("query-data", true);
     }
 
     public long getExpectedStatusCode() {

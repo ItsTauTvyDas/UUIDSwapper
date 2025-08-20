@@ -16,6 +16,7 @@ A velocity plugin for swapping player UUIDs or usernames.
   - [ ] Some service features are not finished
 - [ ] Online UUID caching (**SQLite**/**Memory**/~~Toml~~) **(almost done)**
   - [x] Automatically download database drivers
+- [ ] BungeeCord support (almost done)
 - [ ] Use online skins (???)
 - [ ] Swap skins
 - [ ] Set default skin (custom skin pack?)

@@ -1,35 +1,34 @@
-package me.itstautvydas.uuidswapper;
+package me.itstautvydas.uuidswapper.loader;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.inject.Inject;
-import com.moandjiezana.toml.Toml;
 import com.velocitypowered.api.event.EventTask;
-import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.player.configuration.PlayerConfigurationEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.UuidUtils;
 import me.itstautvydas.BuildConstants;
+import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.crossplatform.PlatformType;
+import me.itstautvydas.uuidswapper.data.FetchedUuidData;
 import me.itstautvydas.uuidswapper.database.CacheDatabaseManager;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.config.ServiceConfiguration;
+import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
-import me.itstautvydas.uuidswapper.helper.ResponseData;
-import net.kyori.adventure.dialog.DialogLike;
+import me.itstautvydas.uuidswapper.data.ResponseData;
+import me.itstautvydas.uuidswapper.crossplatform.CrossPlatformImplementation;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
 import org.slf4j.Logger;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
@@ -38,10 +37,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletionException;
 
 @Plugin(id = "uuid-swapper",
@@ -50,7 +46,7 @@ import java.util.concurrent.CompletionException;
         description = "Swap player names or UUID, use online UUIDs for offline mode!",
         url = "https://itstautvydas.me",
         authors = { "ItsTauTvyDas" })
-public class UUIDSwapper {
+public class UUIDSwapperVelocity {
 
     private Configuration config;
 
@@ -65,11 +61,11 @@ public class UUIDSwapper {
 
     private final HttpClient client;
 
-    private final Map<UUID, UUID> fetchedUuids = new HashMap<>();
+    private final Map<UUID, FetchedUuidData> fetchedUuids = new HashMap<>();
     private final Map<UUID, Long> throttlesConnections = new HashMap<>();
 
     @Inject
-    public UUIDSwapper(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) throws IOException {
+    public UUIDSwapperVelocity(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) throws Exception {
         this.logger = logger;
         this.dataDirectory = dataDirectory;
         this.server = server;
@@ -87,24 +83,20 @@ public class UUIDSwapper {
         logger.info("# {} => {}", entry.getKey(), entry.getValue());
     }
 
-    public void reloadConfig() throws IOException {
+    public void reloadConfig() throws Exception {
         Files.createDirectories(dataDirectory);
 
         driversDirectory = dataDirectory.resolve("drivers");
         Files.createDirectories(driversDirectory);
 
-        var configFile = dataDirectory.resolve("config.toml");
-        if (Files.notExists(configFile)) {
-            try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.toml")) {
-                if (in != null) {
-                    logger.info("Copying configuration file...");
-                    Files.copy(in, configFile);
-                }
-            }
-        }
-
-        var toml = new Toml().read(configFile.toFile());
-        config = new Configuration(toml, this);
+        CrossPlatformImplementation.init(
+                PlatformType.VELOCITY,
+                server,
+                logger,
+                dataDirectory.resolve("config.toml")
+        );
+        CrossPlatformImplementation.getVelocity().loadConfiguration();
+        config = new Configuration();
 
         logger.info("Configuration loaded.");
         logger.info("Using online UUIDs => {}", config.areOnlineUUIDsEnabled());
@@ -118,9 +110,10 @@ public class UUIDSwapper {
             log(entry);
     }
 
-    public EventTask tryFetchUuid(String username, UUID uniqueUuid,
+    public EventTask tryFetchUuid(String username, UUID uniqueUuid, String remoteAddress,
                                   ObjectHolder<PreLoginEvent.PreLoginComponentResult> eventResult,
-                                  BiObjectHolder<UUID, UUID> newUuid) {
+                                  BiObjectHolder<UUID, FetchedUuidData> newUuid,
+                                  Runnable after) {
         var originalUuid = Utils.requireUuid(username, uniqueUuid); // Pre-1.20.1
 
         return EventTask.async(() -> {
@@ -299,7 +292,7 @@ public class UUIDSwapper {
                     String uuidString;
                     try {
                         if (responseBody instanceof JsonElement element)
-                            uuidString = Utils.getJsonValue(element, service.getPathToUuid());
+                            uuidString = Utils.getJsonValue(element, service.getPathToUuid()).getAsString();
                         else
                             uuidString = responseBody.toString();
                     } catch (Exception ex) {
@@ -331,7 +324,48 @@ public class UUIDSwapper {
                         continue;
                     }
 
-                    newUuid.set(originalUuid, uuid);
+                    List<GameProfile.Property> properties = null;
+                    if (responseBody instanceof JsonElement element) {
+                        String path = service.getPathToProperties();
+                        if (path == null)
+                            path = service.getPathToTextures();
+                        try {
+                            var propertiesJsonElement = Utils.getJsonValue(element, path);
+                            if (propertiesJsonElement.isJsonArray()) {
+                                properties = propertiesJsonElement.getAsJsonArray()
+                                        .asList()
+                                        .stream()
+                                        .map(JsonElement::getAsJsonObject)
+                                        .map(x -> new GameProfile.Property(
+                                                x.get("name").getAsString(),
+                                                x.get("value").getAsString(),
+                                                x.get("signature").getAsString()
+                                        ))
+                                        .toList();
+                            } else if (propertiesJsonElement.isJsonObject()) {
+                                properties = List.of(
+                                        new GameProfile.Property(
+                                                propertiesJsonElement.getAsJsonObject().get("name").getAsString(),
+                                                propertiesJsonElement.getAsJsonObject().get("value").getAsString(),
+                                                propertiesJsonElement.getAsJsonObject().get("signature").getAsString()
+                                        )
+                                );
+                            }
+                        } catch (Exception ex) {
+                            if (sendErrorMessages)
+                                logger.error("{} Failed to fetch profile's properties!", prefix);
+                            if (service.isDebugEnabled())
+                                logger.error(ex.getMessage(), ex);
+                        }
+                    }
+
+                    if (config.shouldCacheOnlineUuids() && config.getDatabaseConfiguration().isEnabled() && database.isDriverRunning()) {
+                        var data = new OnlinePlayerData(originalUuid, uuid, properties, remoteAddress, null, null);
+                        newUuid.set(originalUuid, data);
+                        database.storeOnlinePlayerCache(data);
+                    } else {
+                        newUuid.set(originalUuid, new FetchedUuidData(originalUuid, uuid, properties));
+                    }
 
                     if (sendMessages)
                         logger.info("{} UUID successfully fetched for {} => {}", prefix, username, uuid);
@@ -357,10 +391,12 @@ public class UUIDSwapper {
                 if (disconnectMessage != null) {
                     disconnectMessage = Utils.replacePlaceholders(disconnectMessage, placeholders);
                     eventResult.set(PreLoginEvent.PreLoginComponentResult.denied(Utils.toComponent(disconnectMessage)));
+                    after.run();
                     return;
                 }
                 eventResult.set(PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("multiplayer.disconnect.generic")));
             }
+            after.run();
         });
     }
 
@@ -407,8 +443,10 @@ public class UUIDSwapper {
         return tryFetchUuid(
                 event.getUsername(),
                 event.getUniqueId(),
+                event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
                 new ObjectHolder<>(event.getResult(), event::setResult),
-                new BiObjectHolder<>(null, null, fetchedUuids::put)
+                new BiObjectHolder<>(null, null, fetchedUuids::put),
+                () -> throttlesConnections.put(event.getUniqueId(), System.currentTimeMillis())
         );
     }
 
@@ -427,9 +465,9 @@ public class UUIDSwapper {
     public void onGameProfileRequest(GameProfileRequestEvent event) {
         if (config.areOnlineUUIDsEnabled()) {
             var originalUuid = Utils.requireUuid(event.getUsername(), event.getGameProfile().getId());
-            var newUuid = fetchedUuids.get(originalUuid);
-            if (newUuid != null) {
-                event.setGameProfile(Utils.createProfile(event.getUsername(), newUuid, event.getGameProfile()));
+            var fetched = fetchedUuids.get(originalUuid);
+            if (fetched != null) {
+                event.setGameProfile(Utils.createProfile(event.getUsername(), fetched.getOnlineUuid(), event.getGameProfile(), fetched.getProperties()));
                 if (!config.stillSwapUuids())
                     return;
             }
@@ -447,7 +485,7 @@ public class UUIDSwapper {
                 logger.info(" # Username => {}", newUsername);
             if (newUUIDStr != null)
                 logger.info(" # Unique ID => {}", newUUIDStr);
-            event.setGameProfile(Utils.createProfile(newUsername, newUUIDStr, event.getGameProfile()));
+            event.setGameProfile(Utils.createProfile(newUsername, newUUIDStr, event.getGameProfile(), null));
         }
     }
 
