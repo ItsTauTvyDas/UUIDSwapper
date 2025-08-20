@@ -1,7 +1,7 @@
 package me.itstautvydas.uuidswapper.config;
 
 import com.moandjiezana.toml.Toml;
-import me.itstautvydas.uuidswapper.UUIDSwapper;
+import me.itstautvydas.uuidswapper.loader.UUIDSwapperVelocity;
 import me.itstautvydas.uuidswapper.Utils;
 
 import java.util.*;
@@ -10,9 +10,9 @@ public class Configuration {
     private Toml config;
     private final Map<String, ServiceConfiguration> services = new HashMap<>();
     private ServiceConfiguration defaultServiceConfig;
-    private final UUIDSwapper plugin;
+    private final UUIDSwapperVelocity plugin;
 
-    public Configuration(Toml config, UUIDSwapper plugin) {
+    public Configuration(Toml config, UUIDSwapperVelocity plugin) {
         this.plugin = plugin;
         reload(config);
     }
@@ -138,7 +138,7 @@ public class Configuration {
     }
 
     public boolean shouldCacheOnlineUuids() {
-        return config.getBoolean("online-uuids.caching.enabled", true) && getDatabaseConfiguration().isDatabaseEnabled();
+        return config.getBoolean("online-uuids.caching.enabled", true);
     }
 
     public DatabaseConfiguration getDatabaseConfiguration() {

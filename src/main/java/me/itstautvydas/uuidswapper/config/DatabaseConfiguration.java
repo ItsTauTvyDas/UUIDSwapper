@@ -11,39 +11,39 @@ public class DatabaseConfiguration {
         this.mainConfig = mainConfig;
     }
 
-    public String getDatabaseDriverName() {
+    public String getDriverName() {
         return config.getString("driver", "SQLite");
     }
 
-    public String getDatabaseFileName() {
+    public String getFileName() {
         return config.getString("file", "players-data.db");
     }
 
-    public long getDatabaseOpenTime() {
+    public long getOpenTime() {
         return Math.max(-1L, config.getLong("keep-open-for", 10L));
     }
 
-    public long getDatabaseTimerRepeat() {
+    public long getTimerRepeat() {
         return Math.max(1L, config.getLong("timer-repeat-time", 10L));
     }
 
-    public boolean isDatabaseDebugEnabled() {
+    public boolean isDebugEnabled() {
         return config.getBoolean("debug", false);
     }
 
-    public boolean isDatabaseEnabled() {
+    public boolean isEnabled() {
         return config.getBoolean("enabled", true);
     }
 
-    public long getDatabaseTimeout() {
+    public long getTimeout() {
         return Math.max(1000L, config.getLong("timeout", 5000L));
     }
 
-    public String getDatabaseDriverDownloadLink() {
+    public String getDriverDownloadLink() {
         return config.getString("download-link");
     }
 
-    public boolean shouldDatabaseBeDownloaded() {
+    public boolean shouldDriverBeDownloaded() {
         return config.getBoolean("download-driver", true);
     }
 

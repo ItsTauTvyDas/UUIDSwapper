@@ -46,8 +46,20 @@ public class ServiceConfiguration {
         return config.getLong("timeout", 3000L);
     }
 
+    public boolean doesAllowCaching() {
+        return config.getBoolean("allow-caching", true);
+    }
+
     public String getPathToUuid() {
         return config.getString("json-path-to-uuid", "");
+    }
+
+    public String getPathToTextures() {
+        return config.getString("json-path-to-textures");
+    }
+
+    public String getPathToProperties() {
+        return config.getString("json-path-to-properties");
     }
 
     public String getDefaultDisconnectMessage() {
