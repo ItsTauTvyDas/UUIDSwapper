@@ -24,4 +24,8 @@ public class ObjectHolder<T> {
     public T get() {
         return object;
     }
+
+    public boolean containsValue() {
+        return object != null;
+    }
 }
