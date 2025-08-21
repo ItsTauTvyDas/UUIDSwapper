@@ -1,8 +1,8 @@
 package me.itstautvydas.uuidswapper.config;
 
-import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
-import me.itstautvydas.uuidswapper.crossplatform.CrossPlatformImplementation;
 import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 
 import java.util.*;
 
@@ -11,16 +11,14 @@ public class Configuration {
     private ServiceConfiguration defaultServiceConfig;
     private ConfigurationWrapper config;
 
-    public Configuration() {
-        reload();
-    }
+    public void load(ConfigurationWrapper config) {
+        services.clear();
 
-    public void reload() {
-        this.config = CrossPlatformImplementation.getCurrent().getConfig();
+        this.config = config;
         var serviceDefaults = config.getSection("online-uuids.service-defaults");
         this.defaultServiceConfig = new ServiceConfiguration(serviceDefaults);
 
-        services.clear();
+        // TODO YAML support?
 //        var list = Utils.getTablesWithDefaults("online-uuids.services", config, serviceDefaults);
         var list = config.getSections("online-uuids.services", serviceDefaults);
         if (list != null) {
@@ -35,7 +33,7 @@ public class Configuration {
         return defaultServiceConfig;
     }
 
-    public boolean areOnlineUUIDsEnabled() {
+    public boolean areOnlineUuidsEnabled() {
         return config.getBoolean("online-uuids.enabled", false);
     }
 
@@ -62,7 +60,7 @@ public class Configuration {
     }
 
     public boolean isForcedOfflineModeEnabled() {
-        return CrossPlatformImplementation.getCurrent().isServerOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
+        return PluginWrapper.getCurrent().isServerOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
     }
 
     public boolean isForcedOfflineModeSetByDefault() {

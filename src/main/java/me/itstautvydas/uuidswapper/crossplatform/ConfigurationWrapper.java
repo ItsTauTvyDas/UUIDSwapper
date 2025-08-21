@@ -2,7 +2,6 @@ package me.itstautvydas.uuidswapper.crossplatform;
 
 import com.moandjiezana.toml.Toml;
 import lombok.Getter;
-import lombok.Setter;
 import me.itstautvydas.uuidswapper.Utils;
 import net.md_5.bungee.config.Configuration;
 

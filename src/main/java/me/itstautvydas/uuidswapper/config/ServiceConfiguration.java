@@ -1,10 +1,11 @@
 package me.itstautvydas.uuidswapper.config;
 
-import com.moandjiezana.toml.Toml;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
+import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -16,10 +17,11 @@ public class ServiceConfiguration {
     public ServiceConfiguration(ConfigurationWrapper config) {
         this.config = config;
 
-        var handlers = config.getSections("online-uuids.services.response-handlers");
+        var handlers = config.getSections("response-handlers");
         if (handlers != null) {
             for (var handler : handlers)
                 this.handlers.add(new ResponseHandler(handler));
+            this.handlers.sort(Comparator.comparingLong(ResponseHandler::getOrder));
         }
     }
 
@@ -27,9 +29,9 @@ public class ServiceConfiguration {
         return handlers;
     }
 
-    public ResponseHandler executeResponseHandlers(Map<String, Object> placeholders) {
+    public ResponseHandler executeResponseHandlers(ResponseHandlerState state, Map<String, Object> placeholders) {
         for (var handler : getResponseHandlers()) {
-            if (handler.testConditions(placeholders))
+            if (handler.getExecuteState() == state && handler.testConditions(placeholders))
                 return handler;
         }
         return null;
@@ -49,6 +51,10 @@ public class ServiceConfiguration {
 
     public boolean doesAllowCaching() {
         return config.getBoolean("allow-caching", true);
+    }
+
+    public boolean shouldIgnoreStatusCode() {
+        return config.getBoolean("ignore-status-code", false);
     }
 
     public String getPathToUuid() {
