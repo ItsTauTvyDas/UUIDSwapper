@@ -1,9 +1,8 @@
 package me.itstautvydas.uuidswapper.enums;
 
 public enum ResponseHandlerState {
-    BEFORE_UUID,
-    AFTER_UUID,
     AFTER_REQUEST,
+    AFTER_UUID,
     ON_FALLBACK,
     ON_DISCONNECT,
     ON_CONNECT;
