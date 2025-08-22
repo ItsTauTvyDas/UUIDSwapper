@@ -1,33 +1,29 @@
 package me.itstautvydas.uuidswapper.database;
 
-import com.velocitypowered.api.scheduler.ScheduledTask;
-import me.itstautvydas.uuidswapper.UUIDSwapper;
-import me.itstautvydas.uuidswapper.config.DatabaseConfiguration;
+import lombok.Getter;
+import me.itstautvydas.uuidswapper.config.Configuration;
+import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
+import me.itstautvydas.uuidswapper.database.implementation.MemoryCacheImplementation;
 import me.itstautvydas.uuidswapper.database.implementation.SQLiteImplementation;
-import org.slf4j.event.Level;
 
-import java.net.InetSocketAddress;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 public class CacheDatabaseManager {
-    private final UUIDSwapper plugin;
+    @Getter
     private DriverImplementation driver;
     private long timeCounter;
-    private ScheduledTask timer;
+    private PluginTaskWrapper<?> timer;
 
     private final Map<String, Supplier<DriverImplementation>> registry = new HashMap<>();
 
-    public CacheDatabaseManager(UUIDSwapper plugin) {
-        this.plugin = plugin;
-    }
-
     public void init() {
         registerDriver("SQLite", SQLiteImplementation::new);
+        registerDriver("Memory", MemoryCacheImplementation::new);
         initDriverFromConfiguration();
     }
 
@@ -43,27 +39,38 @@ public class CacheDatabaseManager {
     private void clean() {
         if (timer != null)
             timer.cancel();
-        if (driver != null)
+        if (driver != null) {
+            clearConnection();
+        }
+    }
+
+    public void clearConnection() {
+        if (driver == null)
+            return;
+        try {
             driver.clearConnection();
+        } catch (Exception ex) {
+            PluginWrapper.getCurrent().logError("[DatabaseManager]: Failed to close {} driver's connection!", ex, driver.getName());
+        }
     }
 
     public void resetTimer() {
         resetCounter();
         if (timer != null)
             timer.cancel();
-        var keepOpen = getConfiguration().getDatabaseOpenTime();
+        var keepOpen = getConfiguration().getKeepOpenTime();
         if (keepOpen <= 0)
             return;
-        var repeat = getConfiguration().getDatabaseTimerRepeat();
-        timer = plugin.getServer().getScheduler().buildTask(plugin, () -> {
+        var repeat = getConfiguration().getTimerRepeatTime();
+        timer = PluginWrapper.getCurrent().scheduleTask(() -> {
             if (timeCounter == -1)
                 return;
             timeCounter += repeat;
             if (timeCounter > keepOpen) {
-                driver.clearConnection();
+                clearConnection();
                 lockCounter();
             }
-        }).repeat(Duration.ofSeconds(repeat)).schedule();
+        }, repeat, 0);
     }
 
     public void resetCounter() {
@@ -76,9 +83,9 @@ public class CacheDatabaseManager {
 
     public void initDriverFromConfiguration() {
         clean();
-        var name = getConfiguration().getDatabaseDriverName();
+        var name = getConfiguration().getDriverName();
         if (setDriverImplementation(name) == null)
-            plugin.getLogger().error("[DatabaseManager]: Failed to load {} driver!", name);
+            PluginWrapper.getCurrent().logError("[DatabaseManager]: Failed to load {} driver!", null, name);
     }
 
     public Boolean setDriverImplementation(String name) {
@@ -96,13 +103,23 @@ public class CacheDatabaseManager {
             Objects.requireNonNull(driver);
             driver.init();
 
-            driver.createOnlineUuidCacheTable(
-                    getConfiguration().shouldOnlineUuidsTableUseCreatedAt(),
-                    getConfiguration().shouldOnlineUuidsTableUseUpdatedAt()
-            );
-            driver.createRandomizedPlayerDataTable();
+            try {
+                var caching = PluginWrapper.getCurrent().getConfiguration().getOnlineAuthentication().getCaching();
+                driver.createOnlineUuidCacheTable(
+                        caching.isUseCreatedAt(),
+                        caching.isUseUpdatedAt()
+                );
+            } catch (Exception ex) {
+                PluginWrapper.getCurrent().logError("Failed to create {} table", ex, DriverImplementation.ONLINE_UUID_CACHE_TABLE);
+            }
+            
+            try {
+                driver.createRandomizedPlayerDataTable();
+            } catch (Exception ex) {
+                PluginWrapper.getCurrent().logError("Failed to create {} table", ex, DriverImplementation.RANDOM_PLAYER_CACHE_TABLE);
+            }
         } catch (Exception ex) {
-            driver.getLogger().log(Level.ERROR, "Failed to implement SQLite driver!", ex);
+            PluginWrapper.getCurrent().logError(driver.getPrefix(), "Failed to implement SQLite driver!", ex);
             return false;
         }
         this.driver = driver;
@@ -110,31 +127,31 @@ public class CacheDatabaseManager {
         return true;
     }
 
-    public void cacheOnlinePlayer(UUID originalUuid, UUID onlineUuid, InetSocketAddress address) {
-
+    public void storeOnlinePlayerCache(OnlinePlayerData data) {
+        try {
+            driver.storeOnlinePlayerCache(data);
+        } catch (Exception ex) {
+            PluginWrapper.getCurrent().logInfo(driver.getPrefix(), "Failed to store online player database for {}", ex, data.getOriginalUuid());
+        }
     }
 
     public boolean shouldConnectionBeCached() {
-        return getConfiguration().getDatabaseOpenTime() > 0;
+        return getConfiguration().getKeepOpenTime() > 0;
     }
 
     public boolean shouldConnectionBeAlwaysKept() {
-        return getConfiguration().getDatabaseOpenTime() <= -1;
+        return getConfiguration().getKeepOpenTime() <= -1;
     }
 
-    public UUIDSwapper getPlugin() {
-        return plugin;
-    }
-
-    public DatabaseConfiguration getConfiguration() {
-        return plugin.getConfiguration().getDatabaseConfiguration();
-    }
-
-    public DriverImplementation getDriver() {
-        return driver;
+    public Configuration.DatabaseConfiguration getConfiguration() {
+        return PluginWrapper.getCurrent().getConfiguration().getDatabase();
     }
 
     public boolean isDriverRunning() {
-        return driver != null && !driver.isConnectionClosed();
+        try {
+            return driver != null && !driver.isConnectionClosed();
+        } catch (Exception ex) {
+            return false;
+        }
     }
 }
