@@ -1,8 +1,9 @@
-package me.itstautvydas.uuidswapper.crossplatform;
+package me.itstautvydas.uuidswapper.crossplatform.wrappers;
 
-import com.moandjiezana.toml.Toml;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperVelocity;
 import org.slf4j.Logger;
 import org.slf4j.event.Level;
@@ -10,18 +11,6 @@ import org.slf4j.event.Level;
 import java.util.concurrent.TimeUnit;
 
 public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, ScheduledTask, Logger, ProxyServer> {
-    @Override
-    public void loadConfiguration() throws Exception {
-        super.loadConfiguration();
-        var handle = new Toml().read(configurationPath.toFile());
-        configHandle = new ConfigurationWrapper.VelocityConfigurationWrapper(handle, null);
-    }
-
-    @Override
-    public String getResourceConfigurationName() {
-        return "config-velocity.toml";
-    }
-
     @Override
     public boolean isServerOnlineMode() {
         return server.getConfiguration().isOnlineMode();
