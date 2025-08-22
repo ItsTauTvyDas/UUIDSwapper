@@ -1,58 +1,35 @@
 package me.itstautvydas.uuidswapper;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.gson.*;
-import com.moandjiezana.toml.Toml;
-import com.velocitypowered.api.util.GameProfile;
-import com.velocitypowered.api.util.UuidUtils;
-import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import lombok.experimental.UtilityClass;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.enums.PlatformType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
-import java.lang.reflect.Method;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+@UtilityClass
 public class Utils {
-    public static final Map<String, Object> EMPTY_MAP = ImmutableMap.of();
+    private static final Pattern LOG_MESSAGE_BRACKETS = Pattern.compile("\\{}");
 
-    private Utils() {}
-
-    public static GameProfile createProfile(String username, UUID uuid, GameProfile profile, List<GameProfile.Property> properties) {
-        if (username == null)
-            username = profile.getName();
-        if (properties == null)
-            properties = profile.getProperties();
-        return new GameProfile(uuid == null ? profile.getId() : uuid, username, properties);
-    }
-
-    public static GameProfile createProfile(String username, String uuid, GameProfile profile, List<GameProfile.Property> properties) {
-        if (username == null)
-            username = profile.getName();
-        if (properties == null)
-            properties = profile.getProperties();
-        return new GameProfile(uuid == null ? profile.getId() : UUID.fromString(uuid), username, properties);
-    }
-
-    public static boolean containsPlayer(List<String> list, String username, UUID id) {
-        if (list.contains("\"u:" + username + "\""))
-            return true;
-        return list.contains("\"" + id.toString() + "\"");
-    }
-
-    public static String getSwappedValue(Map<String, Object> map, GameProfile profile) {
-        var value = map.get("\"u:" + profile.getName() + "\"");
+    public static String getSwappedValue(Map<String, String> map, String username, UUID uniqueId) {
+        var value = map.get("u:" + username);
         if (value == null)
-            value = map.get("\"" + profile.getId().toString() + "\"");
-        if (value != null)
-            return value.toString();
-        return null;
+            value = map.get(uniqueId.toString());
+        return value;
     }
 
-    public static String buildDataString(Map<String, Object> map) {
+    public static String buildDataString(Map<String, String> map) {
         if (map.isEmpty())
             return "";
         return map.entrySet().stream()
@@ -107,7 +84,7 @@ public class Utils {
                 collectJsonPaths(prefix, newPath, json.get(i), result);
             }
         } else {
-            result.put(prefix + currentPath, node == null ? "[null]" : node.toString());
+            result.put(prefix + currentPath, node == null ? null : node.toString());
         }
     }
 
@@ -139,95 +116,16 @@ public class Utils {
 
     public static UUID requireUuid(String username, UUID uuid) {
         if (uuid == null)
-            return UuidUtils.generateOfflinePlayerUuid(username);
+            return PluginWrapper.getCurrent().generateOfflinePlayerUuid(username);
         return uuid;
     }
 
-    public static String toMessage(ConfigurationWrapper config, String path) {
-        if (config.isPrimitive(path))
-            return config.getString(path);
-        else if (config.isArray(path)) {
-            List<String> list = config.getList(path);
-            if (list == null)
-                return null;
-            return String.join("\n", list);
+    public static String fixLogMessageFormat(String message, PlatformType type) {
+        if (type == PlatformType.BUNGEE) {
+            var counter = new AtomicInteger(0);
+            var matcher = LOG_MESSAGE_BRACKETS.matcher(message);
+            return matcher.replaceAll(match -> "{" + counter.getAndIncrement() + "}");
         }
-        return null;
-    }
-
-    // Unused
-//    @SuppressWarnings("unchecked")
-//    public static Toml getTableWithDefaults(String pathToTable, Toml toml, Toml defaultToml) {
-//        Objects.requireNonNull(pathToTable);
-//        Objects.requireNonNull(toml);
-//        Objects.requireNonNull(defaultToml);
-//
-//        try {
-//            var method = toml.getClass().getDeclaredMethod("get", String.class);
-//            method.setAccessible(true);
-//            var map = (Map<String, Object>) method.invoke(toml, pathToTable);
-//
-//            var constructor = toml.getClass().getDeclaredConstructor(Toml.class, Map.class);
-//            constructor.setAccessible(true);
-//
-//            return map != null ? constructor.newInstance(defaultToml, map) : null;
-//        } catch (Exception ex) {
-//            return toml.getTable(pathToTable);
-//        }
-//    }
-
-    private static Method tomlGetMethod;
-
-    @SuppressWarnings("unchecked")
-    public static List<Toml> getTablesWithDefaults(String pathToTable, Toml toml, Toml defaultToml) {
-        Objects.requireNonNull(pathToTable);
-        Objects.requireNonNull(toml);
-
-        if (defaultToml == null)
-            return toml.getTables(pathToTable);
-
-        try {
-            if (tomlGetMethod == null) {
-                tomlGetMethod = toml.getClass().getDeclaredMethod("get", String.class);
-                tomlGetMethod.setAccessible(true);
-            }
-            var tableArray = (List<Map<String, Object>>) tomlGetMethod.invoke(toml, pathToTable);
-
-            var constructor = toml.getClass().getDeclaredConstructor(Toml.class, Map.class);
-            constructor.setAccessible(true);
-
-            if (tableArray == null)
-                return null;
-
-            var tables = new ArrayList<Toml>();
-            for (Map<String, Object> table : tableArray)
-                tables.add(constructor.newInstance(defaultToml, table));
-
-            return tables;
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            return toml.getTables(pathToTable);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public static <T> T getRawTomlObject(Toml toml, String path, T defaultValue) {
-        Objects.requireNonNull(toml);
-        Objects.requireNonNull(path);
-
-        try {
-            if (tomlGetMethod == null) {
-                tomlGetMethod = toml.getClass().getDeclaredMethod("get", String.class);
-                tomlGetMethod.setAccessible(true);
-            }
-
-            var object = tomlGetMethod.invoke(toml, path);
-            if (object == null)
-                return defaultValue;
-            return (T) object;
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            return defaultValue;
-        }
+        return message;
     }
 }
