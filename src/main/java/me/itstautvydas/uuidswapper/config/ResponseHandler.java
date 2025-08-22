@@ -1,6 +1,5 @@
 package me.itstautvydas.uuidswapper.config;
 
-import com.moandjiezana.toml.Toml;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
 import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
@@ -14,49 +13,83 @@ public class ResponseHandler {
         this.config = config;
     }
 
-    public boolean isPlayerAllowedToJoin() {
-        return config.getBoolean("allow-player-to-join", false);
+    public Boolean isPlayerAllowedToJoin() {
+        if (!config.contains("forcefully-allow-player-to-join"))
+            return null;
+        return config.getBoolean("forcefully-allow-player-to-join");
     }
 
-    public ResponseHandlerState getExecuteTime() {
-        return ResponseHandlerState.fromString(config.getString("when"), ResponseHandlerState.BEFORE_UUID);
+    public ResponseHandlerState getExecuteState() {
+        return ResponseHandlerState.fromString(config.getString("state"), ResponseHandlerState.AFTER_UUID);
+    }
+
+    public Boolean shouldUseFallback() {
+        if (!config.contains("use-fallback"))
+            return null;
+        return config.getBoolean("use-fallback");
+    }
+
+    public boolean shouldApplyProperties() {
+        return config.getBoolean("apply-properties", true);
     }
 
     public String getDisconnectMessage() {
         return Utils.toMessage(config, "disconnect-message");
     }
 
+    public long getOrder() {
+        return config.getLong("order", 9999L);
+    }
+
     public String getConditionsMode() {
         return config.getString("conditions-mode", "AND");
     }
 
-    public boolean ignoreConditionsCase() {
+    public boolean shouldIgnoreConditionsCase() {
         return config.getBoolean("ignore-conditions-case", false);
     }
 
-    public Boolean testConditions(Map<String, Object> placeholders) {
+    public boolean testConditions(Map<String, Object> placeholders) {
         var table = config.getSection("conditions");
         if (table == null)
-            return null;
+            return false;
         var conditions = table.toMap();
+        if (conditions.isEmpty())
+            return true;
         Boolean result = null;
         for (var entry : conditions.entrySet()) {
-            var value = placeholders.get(entry.getKey());
-            if (value == null || entry.getValue() == null)
-                continue;
+            var key = Utils.escapeQuotes(entry.getKey());
+            var conditionValue = entry.getValue();
+            if (conditionValue == null)
+                conditionValue = "[null]";
             boolean conditionResult;
-            if (ignoreConditionsCase())
-                conditionResult = entry.getValue().toString().equalsIgnoreCase(value.toString());
-            else
-                conditionResult = entry.getValue().equals(value);
-            if (result == null)
+            if (key.startsWith("::")) {
+                if (entry.getValue() instanceof Boolean bool)
+                    conditionResult = placeholders.containsKey(key.substring(2)) == bool;
+                else
+                    conditionResult = false;
+            } else {
+                var value = placeholders.get(key);
+                if (value == null)
+                    value = "[null]";
+
+                if (value instanceof String)
+                    value = Utils.escapeQuotes(value.toString());
+
+                if (shouldIgnoreConditionsCase())
+                    conditionResult = conditionValue.toString().equalsIgnoreCase(value.toString());
+                else
+                    conditionResult = conditionValue.equals(value);
+            }
+            if (result == null) {
                 result = conditionResult;
-            else
-            if (getConditionsMode().equalsIgnoreCase("and"))
-                result = result && conditionResult;
-            else
-                result = result || conditionResult;
+            } else {
+                if (getConditionsMode().equals("AND"))
+                    result = result && conditionResult;
+                else
+                    result = result || conditionResult;
+            }
         }
-        return result;
+        return result != null && result;
     }
 }
