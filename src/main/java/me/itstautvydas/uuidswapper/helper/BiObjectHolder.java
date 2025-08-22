@@ -44,4 +44,12 @@ public class BiObjectHolder<T, D> {
     public D getSecond() {
         return object2;
     }
+
+    public boolean containsFirst() {
+        return object != null;
+    }
+
+    public boolean containsSecond() {
+        return object2 != null;
+    }
 }
