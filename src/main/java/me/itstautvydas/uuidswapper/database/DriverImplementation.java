@@ -1,16 +1,18 @@
 package me.itstautvydas.uuidswapper.database;
 
-import me.itstautvydas.uuidswapper.config.DatabaseConfiguration;
-import me.itstautvydas.uuidswapper.helper.SimpleLogger;
-import org.slf4j.event.Level;
+import lombok.Getter;
+import me.itstautvydas.uuidswapper.config.Configuration;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
+import me.itstautvydas.uuidswapper.data.RandomPlayerData;
 
-import java.net.InetSocketAddress;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
+@Getter
 public abstract class DriverImplementation {
     public static final String CREATED_AT = "created_at";
     public static final String UPDATED_AT = "updated_at";
@@ -26,51 +28,44 @@ public abstract class DriverImplementation {
     public static final String RANDOM_PLAYER_CACHE_UUID = "uuid";
 
     private CacheDatabaseManager manager;
-    private SimpleLogger logger;
     private String name;
+    private String prefix;
 
     protected final void init(CacheDatabaseManager manager, String driverName) {
         this.manager = manager;
         this.name = driverName;
-        this.logger = new SimpleLogger(manager.getPlugin().getLogger(), () -> getConfiguration().isDatabaseDebugEnabled()) {
-            @Override
-            public String getLoggerPrefix() {
-                return "[DatabaseManager/" + driverName + "]: ";
-            }
-        };
+        this.prefix = "[DatabaseManager/" + driverName + "]: ";
     }
 
     protected boolean downloadDriverAndLoad() {
-        var driverPath = getManager().getPlugin().getDriversDirectory().resolve(name.replace(" ", "_") + ".jar");
+        var driverPath = PluginWrapper.getCurrent().getDriversDirectory().resolve(name.replace(" ", "_") + ".jar");
         // Download driver
         if (!Files.exists(driverPath)) {
-            if (!getConfiguration().shouldDatabaseBeDownloaded()) {
-                getLogger().log(Level.ERROR,
+            if (!getConfiguration().isDownloadDriver()) {
+                PluginWrapper.getCurrent().logError(prefix,
                         "Driver's file doesn't exist (/drivers/{}) and download function is disabled!",
-                        driverPath.getFileName());
+                        null, driverPath.getFileName());
                 return false;
             }
             var url = getDownloadUrl();
             if (url == null)
-                url = getConfiguration().getDatabaseDriverDownloadLink();
+                url = getConfiguration().getDriverDownloadLink();
             if (url == null) {
-                getLogger().log(Level.ERROR,
+                PluginWrapper.getCurrent().logError(prefix,
                         "Can't download driver, no link provided either by driver's implementation author or in the configuration",
-                        driverPath.getFileName());
+                        null, driverPath.getFileName());
                 return false;
             }
-            getLogger().log(Level.INFO, "Downloading {}...", driverPath.getFileName());
+            PluginWrapper.getCurrent().logInfo(prefix, "Downloading {}...", driverPath.getFileName());
             try (var in = new URL(url).openStream()) {
                 Files.copy(in, driverPath, StandardCopyOption.REPLACE_EXISTING);
-                getLogger().log(Level.INFO, "Driver successfully downloaded! Saved as /drivers/{}", driverPath.getFileName());
+                PluginWrapper.getCurrent().logInfo(prefix, "Driver successfully downloaded! Saved as /drivers/{}", driverPath.getFileName());
             } catch (Exception ex) {
-                getLogger().log(Level.ERROR,
-                        "Failed to download driver from {}!",
-                        ex, url);
+                PluginWrapper.getCurrent().logError(prefix, "Failed to download driver from {}!", ex, url);
                 return false;
             }
         } else {
-            getLogger().log(Level.INFO, "Driver was found, loading {}", driverPath.getFileName());
+            PluginWrapper.getCurrent().logInfo(prefix, "Driver was found, loading {}", driverPath.getFileName());
         }
         // Load class
         String classToLoad = getClassToLoad();
@@ -83,15 +78,13 @@ public abstract class DriverImplementation {
             if (classToLoad != null) {
                 var driverClass = Class.forName(classToLoad, true, loader);
                 onJarFileLoad(loader, driverClass);
-                getLogger().log(Level.INFO, "{} class loaded", classToLoad);
+                PluginWrapper.getCurrent().logInfo(prefix, "{} class loaded", classToLoad);
                 return true;
             }
             onJarFileLoad(loader, null);
             return true;
         } catch (Exception ex) {
-            getLogger().log(Level.ERROR,
-                    "Failed to load {}!",
-                    ex, driverPath);
+            PluginWrapper.getCurrent().logError(prefix, "Failed to load {}!", ex, driverPath);
             return false;
         }
     }
@@ -102,20 +95,14 @@ public abstract class DriverImplementation {
         }
         return connection == null;
     }
-
-    public final String getName() {
-        return name;
+    
+    public void debug(String message, Object ...args) {
+        if (!getConfiguration().isDebugEnabled())
+            return;
+        PluginWrapper.getCurrent().logInfo(prefix, "DEBUG - " + message, args);
     }
 
-    public final SimpleLogger getLogger() {
-        return logger;
-    }
-
-    public final CacheDatabaseManager getManager() {
-        return manager;
-    }
-
-    public DatabaseConfiguration getConfiguration() {
+    public Configuration.DatabaseConfiguration getConfiguration() {
         return manager.getConfiguration();
     }
 
@@ -132,16 +119,16 @@ public abstract class DriverImplementation {
     }
 
     public abstract void init() throws Exception;
-    public abstract void clearConnection();
-    public abstract boolean isConnectionClosed();
+    public abstract void clearConnection() throws Exception;
+    public abstract boolean isConnectionClosed() throws Exception;
 
-    public abstract void createOnlineUuidCacheTable(boolean useCreatedAt, boolean useUpdatedAt);
-    public abstract void createRandomizedPlayerDataTable();
+    public abstract void createOnlineUuidCacheTable(boolean useCreatedAt, boolean useUpdatedAt) throws Exception;
+    public abstract void createRandomizedPlayerDataTable() throws Exception;
 
-    public abstract void storeOnlinePlayerCache(PlayerCache player);
-    public abstract PlayerCache getOnlinePlayerCache(InetSocketAddress address);
-    public abstract PlayerCache getOnlinePlayerCache(UUID uuid);
+    public abstract void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception;
+    public abstract OnlinePlayerData getOnlinePlayerCache(String address) throws Exception;
+    public abstract OnlinePlayerData getOnlinePlayerCache(UUID uuid) throws Exception;
 
-    public abstract void storeRandomPlayerCache(RandomCache player);
-    public abstract RandomCache getRandomPlayerCache(UUID uuid);
+    public abstract void storeRandomPlayerCache(RandomPlayerData player) throws Exception;
+    public abstract RandomPlayerData getRandomPlayerCache(UUID uuid) throws Exception;
 }
