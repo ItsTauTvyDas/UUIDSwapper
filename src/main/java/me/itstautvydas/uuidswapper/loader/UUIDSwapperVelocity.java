@@ -1,24 +1,28 @@
 package me.itstautvydas.uuidswapper.loader;
 
 import com.google.inject.Inject;
+import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
+import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.util.UuidUtils;
+import com.velocitypowered.api.util.GameProfile;
 import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.Utils;
-import me.itstautvydas.uuidswapper.crossplatform.PlatformType;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.service.PlayerDataFetcher;
+import me.itstautvydas.uuidswapper.data.ProfileProperty;
+import me.itstautvydas.uuidswapper.enums.PlatformType;
+import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 
 @Plugin(id = "uuid-swapper",
         name = "UUIDSwapper",
@@ -30,13 +34,7 @@ public class UUIDSwapperVelocity {
 
     @Inject
     public UUIDSwapperVelocity(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
-        PluginWrapper.init(
-                PlatformType.VELOCITY,
-                this,
-                server,
-                logger,
-                dataDirectory.resolve("config.toml")
-        );
+        PluginWrapper.init(PlatformType.VELOCITY, this, server, logger, dataDirectory);
     }
 
     @Subscribe
@@ -50,47 +48,26 @@ public class UUIDSwapperVelocity {
     }
 
     @Subscribe
-    public EventTask onPlayerPreLogin(PreLoginEvent event) {
-        final var config = PluginWrapper.getCurrent().getConfiguration();
-
-        if (!config.areOnlineUuidsEnabled())
-            return null;
-
-        if (PluginWrapper.getCurrent().isServerOnlineMode())
-            event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode());
-
-        if (config.getCheckForOnlineUuid() && event.getUniqueId() != null) {
-            var offlineUuid = UuidUtils.generateOfflinePlayerUuid(event.getUsername());
-            if (!offlineUuid.equals(event.getUniqueId())) {
-                if (config.getSendSuccessfulMessagesToConsole())
-                    PluginWrapper.getCurrent().logInfo("Player {} has online UUID ({}), skipping fetching.", event.getUsername(), event.getUniqueId());
-                return null;
-            }
-        }
-
-        if (PlayerDataFetcher.isThrottled(event.getUniqueId())) {
-            if (!config.isConnectionThrottleDialogEnabled()) {
-                event.setResult(PreLoginEvent.PreLoginComponentResult.denied(
-                        Utils.toComponent(config.getConnectionThrottleDialogMessage())
-                ));
-            }
-            return null;
-        }
-
-        return EventTask.async(() -> PlayerDataFetcher.getPlayerData(
-                    event.getUsername(),
-                    event.getUniqueId(),
-                    event.getConnection().getRemoteAddress().getAddress().getHostAddress()
-            ).thenAccept(fetchedData -> {
-                if (fetchedData.getSecond().hasMessage()) {
-                    if (fetchedData.getSecond().isTranslatable())
-                        event.setResult(PreLoginEvent.PreLoginComponentResult
-                                .denied(Component.translatable(fetchedData.getSecond().getMessage())));
-                    else
-                        event.setResult(PreLoginEvent.PreLoginComponentResult
-                                .denied(Utils.toComponent(fetchedData.getSecond().getMessage())));
+    public void onPlayerPreLogin(PreLoginEvent event, Continuation continuation) {
+        PluginWrapper.getCurrent().onPlayerLogin(
+                event.getUsername(),
+                event.getUniqueId(),
+                event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
+                true,
+                () -> event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode()),
+                (message) -> {
+                    if (message.hasMessage()) {
+                        if (message.isTranslatable()) {
+                            event.setResult(PreLoginEvent.PreLoginComponentResult
+                                    .denied(Component.translatable(message.getMessage())));
+                        } else {
+                            event.setResult(PreLoginEvent.PreLoginComponentResult
+                                    .denied(Utils.toComponent(message.getMessage())));
+                        }
+                    }
                 }
-            }).join());
+        ).join();
+        continuation.resume();
     }
 
 //    @Subscribe
@@ -104,31 +81,17 @@ public class UUIDSwapperVelocity {
 //        }
 //    }
 
-//    @Subscribe
-//    public void onGameProfileRequest(GameProfileRequestEvent event) {
-//        if (config.areOnlineUuidsEnabled()) {
-//            var originalUuid = Utils.requireUuid(event.getUsername(), event.getGameProfile().getId());
-//            var fetched = fetchedUuids.get(originalUuid);
-//            if (fetched != null) {
-//                event.setGameProfile(Utils.createProfile(event.getUsername(), fetched.getOnlineUuid(), event.getGameProfile(), fetched.getProperties()));
-//                if (!config.stillSwapUuids())
-//                    return;
-//            }
-//        }
-//
-//        var swappedUsernames = config.getCustomPlayerNames();
-//        var swappedUuids = config.getSwappedUuids();
-//
-//        var newUsername = Utils.getSwappedValue(swappedUsernames, event.getGameProfile());
-//        var newUUIDStr = Utils.getSwappedValue(swappedUuids, event.getGameProfile());
-//
-//        if (newUsername != null || newUUIDStr != null) {
-//            logger.info("Player's ({} {}) new profile is:", event.getUsername(), event.getGameProfile().getId());
-//            if (newUsername != null)
-//                logger.info(" # Username => {}", newUsername);
-//            if (newUUIDStr != null)
-//                logger.info(" # Unique ID => {}", newUUIDStr);
-//            event.setGameProfile(Utils.createProfile(newUsername, newUUIDStr, event.getGameProfile(), null));
-//        }
-//    }
+    @Subscribe
+    public void onGameProfileRequest(GameProfileRequestEvent event) {
+        var holder = new BiObjectHolder<>(event.getUsername(), event.getGameProfile().getId());
+        var properties = new ArrayList<ProfileProperty>();
+        PluginWrapper.getCurrent().onGameProfileRequest(holder, properties);
+        event.setGameProfile(new GameProfile(
+                holder.getSecond(),
+                holder.getFirst(),
+                properties.isEmpty() ? event.getGameProfile().getProperties() : properties.stream()
+                        .map(x -> new GameProfile.Property(x.getName(), x.getValue(), x.getSignature()))
+                        .toList()
+        ));
+    }
 }
