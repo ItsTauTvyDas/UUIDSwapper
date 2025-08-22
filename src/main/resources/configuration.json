@@ -1,0 +1,141 @@
+{
+  "database": {
+    "enabled": false,
+    "download-driver": true,
+    "driver": "SQLite",
+    "file": "players-data.db",
+    "timeout": 5000,
+    "keep-open-time": 10,
+    "timer-repeat-time": 1,
+    "debug": false
+  },
+  "online-authentication": {
+    "enabled": false,
+    "use-service": "PlayerDB",
+    "fallback-services": [
+      "MinecraftServices"
+    ],
+    "fallback-service-remember-time": 21600,
+    "max-timeout": 6000,
+    "min-timeout": 1000,
+    "check-for-online-uuid": true,
+    "send-messages-to-console": true,
+    "send-error-messages-to-console": true,
+    "service-connection-throttle": 5000,
+    "service-connection-throttled-message": "UUID service connection throttles, wait {time-left} seconds until you can connect again!",
+    "caching": {
+      "enabled": true,
+      "keep-time": 7200,
+      "use-created-at": true,
+      "use-updated-at": true
+    },
+    "username-changes": {
+      "check-depending-on-ip-address": false,
+      "check-username-cache": true
+    },
+    "service-defaults": {
+      "expect-status-code": 200,
+      "bad-uuid-disconnect-message": "<red>Failed to get your online UUID (bad UUID), contact server's administrator!",
+      "default-disconnect-message": "<red>Failed to get your online UUID",
+      "connection-error-disconnect-message": "<red>Failed to get your online UUID (connection error), contact server's administrator!",
+      "service-bad-status-disconnect-message": "<red>Failed to get your online UUID (service returned {http.status}), contact server's administrator!",
+      "unknown-error-disconnect-message": "<red>Failed to get your online UUID (unknown error), contact server's administrator!",
+      "service-timeout-disconnect-message": "<red>Failed to get your online UUID (service timed out), try again later!",
+      "timeout": 3000,
+      "allow-caching": true,
+      "use-fallbacks": [
+        "ON_CONNECTION_ERROR",
+        "ON_INVALID_UUID",
+        "ON_BAD_UUID_PATH",
+        "ON_UNKNOWN_ERROR",
+        "ON_BAD_STATUS"
+      ],
+      "headers": {
+        "Accept": "application/json"
+      }
+    },
+    "services": [
+      {
+        "name": "example",
+        "endpoint": "https://your-service.com/get-uuid/{username}",
+        "request-method": "GET",
+        "json-path-to-uuid": "path.to[0].uuid",
+        "json-path-to-properties": "path.to.properties",
+        "json-path-to-textures": "path.to.textures",
+        "debug": false,
+        "response-handlers": [
+          {
+            "order": 1,
+            "state": "AFTER_UUID",
+            "allow-player-to-join": true,
+            "use-fallback": true,
+            "apply-properties": true,
+            "disconnect-message": "Disconnected",
+            "ignore-status-code": false,
+            "conditions-mode": "AND",
+            "ignore-conditions-case": false,
+            "conditions": {
+              "placeholder": "value",
+              "::response.path.to[1].json": true,
+              "response.json.path": true
+            }
+          }
+        ],
+        "headers": {},
+        "post-data": {},
+        "query-data": {}
+      },
+      {
+        "name": "PlayerDB",
+        "endpoint": "https://playerdb.co/api/player/minecraft/{username}",
+        "json-path-to-uuid": "data.player.id",
+        "json-path-to-properties": "data.player.properties",
+        "ignore-status-code": true,
+        "response-handlers": [
+          {
+            "state": "AFTER_UUID",
+            "allow-player-to-join": true,
+            "conditions": {
+              "response.code": "minecraft.invalid_username"
+            }
+          }
+        ]
+      },
+      {
+        "name": "MinecraftServices",
+        "endpoint": "https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}",
+        "json-path-to-uuid": "id",
+        "ignore-status-code": true,
+        "response-handlers": [
+          {
+            "state": "AFTER_UUID",
+            "allow-player-to-join": true,
+            "conditions": {
+              "::response.errorMessage": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "player-randomizer": {
+    "enabled": false,
+    "username": {
+      "randomize": true,
+      "save": false,
+      "characters": "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM123456789_"
+    },
+    "uuid": {
+      "randomize": true,
+      "save": false
+    }
+  },
+  "swapped-uuids": {
+    "u:Notch": "00000000-0000-0000-0000-000000000000",
+    "00000000-0000-0000-0000-000000000000": "00000000-0000-0000-0000-000000000001"
+  },
+  "custom-player-names": {
+    "u:Notch": "Herobrine",
+    "00000000-0000-0000-0000-000000000000": "jeb_"
+  }
+}
