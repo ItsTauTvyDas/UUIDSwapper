@@ -1,4 +1,4 @@
-package me.itstautvydas.uuidswapper.crossplatform;
+package me.itstautvydas.uuidswapper.enums;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
