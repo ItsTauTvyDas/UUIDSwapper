@@ -109,36 +109,6 @@ swap-uuids = true
     },
     "services": [
       {
-        "name": "example",
-        "endpoint": "https://your-service.com/get-uuid/{username}",
-        "request-method": "GET",
-        "json-path-to-uuid": "path.to[0].uuid",
-        "json-path-to-properties": "path.to.properties",
-        "json-path-to-textures": "path.to.textures",
-        "debug": false,
-        "response-handlers": [
-          {
-            "order": 1,
-            "state": "AFTER_UUID",
-            "allow-player-to-join": true,
-            "use-fallback": true,
-            "apply-properties": true,
-            "disconnect-message": "Disconnected",
-            "ignore-status-code": false,
-            "conditions-mode": "AND",
-            "ignore-conditions-case": false,
-            "conditions": {
-              "placeholder": "value",
-              "::response.path.to[1].json": true,
-              "response.json.path": true
-            }
-          }
-        ],
-        "headers": {},
-        "post-data": {},
-        "query-data": {}
-      },
-      {
         "name": "PlayerDB",
         "endpoint": "https://playerdb.co/api/player/minecraft/{username}",
         "json-path-to-uuid": "data.player.id",
