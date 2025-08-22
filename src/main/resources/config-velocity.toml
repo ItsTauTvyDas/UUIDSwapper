@@ -72,12 +72,12 @@
         no-requests-with-existing-username = true
     # Whatever is specified here, will get copied over to all services, unless it's already specified.
     [online-uuids.service-defaults]
-        #expect-status-code = 200 # Optional, default is 200
+        expect-status-code = 200 # Optional, default is 200
         # Placeholders: (available in the most messages)
         #   {response.<json path>} - get value from JSON (only available if response body is JSON)
         #       JSON values that are null will get converted to "[null]".
-        #   ::{<translatable key>} - show a translatable key to the player, no additional text is allowed!!!
-        #   ::{<translatable key>}${<placeholder>} - if the translatable message contains an argument (%s), you can replace it with this format
+        #   {translatable:<translatable key>} - show a translatable key to the player
+        #   {translatable:<translatable key>,<text/placeholder>,...} - if the translatable message contains an argument (%s), you can replace it with this format
         #   {response} - response's body (only available if response is text-based)
         #   {http.status} - returned HTTP status code.
         #   {http.url} - service endpoint's URL.
@@ -95,18 +95,19 @@
         #   {timeout-sounter} - same as {took} but including the fallbacks too.
         #   {timeout-left} - how many milliseconds are left for other fallbacks.
         bad-uuid-disconnect-message = "<red>Failed to get your online UUID (bad UUID), contact server's administrator!"
-        default-disconnect-message = "<red>Failed to get your online UUID" # If this is not defined, multiplayer.disconnect.generic message is used
+        default-disconnect-message = "<red>Failed to get your online UUID" # If this is not defined, multiplayer.disconnect.generic message is used.
         connection-error-disconnect-message = "<red>Failed to get your online UUID (connection error), contact server's administrator!"
         service-bad-status-disconnect-message = "<red>Failed to get your online UUID (service returned {http.status}), contact server's administrator!"
         unknown-error-disconnect-message = "<red>Failed to get your online UUID (unknown error), contact server's administrator!"
         service-timeout-disconnect-message = "<red>Failed to get your online UUID (service timed out), try again later!"
         timeout = 3000 # 3 seconds
-        [online-uuids.service-defaults.use-fallbacks] # Define when the service should fall back to the next service in case of failure, disconnect otherwise
-            on-connection-error = true # When unknown connection error appears
-            on-invalid-uuid = true # When failed to parse UUID string
-            on-bad-uuid-path = true # When json-path-to-uuid was not found or is incorrect
-            on-unknown-error = true # When unhandled exception appears
-            on-bad-status = false # When service's HTTP status code is not what configuration expected
+        allow-caching = true # Optional, default is true.
+        [online-uuids.service-defaults.use-fallbacks] # Define when the service should fall back to the next service in case of failure, disconnect otherwise.
+            on-connection-error = true # When unknown connection error appears.
+            on-invalid-uuid = true # When failed to parse UUID string.
+            on-bad-uuid-path = true # When json-path-to-uuid was not found or is incorrect.
+            on-unknown-error = true # When unhandled exception appears.
+            on-bad-status = true # When service's HTTP status code is not what configuration expected.
         [online-uuids.service-defaults.headers]
             Accept = "application/json"
     [[online-uuids.services]]
@@ -124,13 +125,17 @@
         #   {"key": ["UUID"]} -> "key[0]"
         #   {"key": [{"key2": "UUID"}]} -> "key[0].key2"
         json-path-to-uuid = "path.to[0].uuid" # Optional, default is ""
+        # Choose one of the settings below, can't be both.
+        json-path-to-properties = "path.to.properties" # Optional, expected JSON is [{'name' : '...', 'value': '...', 'signature': '...'},...]
+        json-path-to-textures = "path.to.textures" # Optional, expected JSON is {'name' : '...', 'value': '...', 'signature': '...'}
         # Sends debug messages to console.
         debug = false # Optional, default is false.
         # If response handlers are not defined and the plugin fails to find the UUID, it will not allow the player to join!
-        # Handlers get executed depending on the specified order (random otherwise) and checks if at least one of the handlers allows player to join.
+        # Handlers get executed depending on the specified order (random otherwise) and checks if at least one of the handlers allows the player to join.
         [[online-uuids.services.response-handlers]]
             # Since TOML configuration uses HashMap to store keys and values, it's not garuntee to be in order.
             # If two handlers have the same order number, the placement might be random!
+            # The default internal value is 9999, executing is in ascending order
             order = 1
             # When to execute this handler. Availabled values:
             #   BEFORE_UUID - execute before UUID fetching
@@ -139,9 +144,12 @@
             #   ON_FALLBACK - execute when fallback service is used
             #   ON_DISCONNECT - execute when a player is about to disconnect (not by other handlers!)
             #   ON_CONNECT - execute when a player is about to connect (not by other handlers!)
-            execute = "BEFORE_UUID" # Optional, default is BEFORE_UUID.
-            allow-player-to-join = true # Optional, default is false.
-            #disconnect-message = "..." # Optional. Send a custom disconnect message if allow-player-to-join is set to false.
+            state = "AFTER_UUID" # Optional, default is AFTER_UUID.
+            forcefully-allow-player-to-join = true # Optional, default is false.
+            use-fallback = true # Optional, undefiend by default. If defined, then 'use-fallbacks' options are ignored!
+            apply-properties = true # Optional, default is true. Should profile properties be applied to the player?
+            disconnect-message = "Disconnected" # Optional. Send a custom disconnect message if allow-player-to-join is set to false.
+            ignore-status-code = false # Optional, default is false. Ignores status code check, this allows to do more response handling
             # Conditions modes:
             # "OR" - at least one of the specified conditions have to match.
             # "AND" - all the specified conditions have to match.
@@ -152,8 +160,8 @@
                 # If a placeholder returns "value", then this handler will decide if player is
                 # allowed to join based on "allow-player-to-join" setting.
                 "placeholder" = "value"
-                # If you want to check if placeholder exists, make value true or false.
-                "response.path.to[1].json" = true
+                # To check if key exists, use '::' prefix
+                "::response.path.to[1].json" = true
                 # If you want to compare it to a boolean, use quotes
                 "response.json.path" = "true"
         [online-uuids.services.post-data] # Optional.
@@ -166,28 +174,32 @@
         name = "PlayerDB"
         endpoint = "https://playerdb.co/api/player/minecraft/{username}"
         json-path-to-uuid = "data.player.id"
+        json-path-to-properties = "data.player.properties"
+        ignore-status-code = true
         [[online-uuids.services.response-handlers]]
             # Allow player to join with server's generated UUID if username is not tied to any premium account.
-            allow-player-to-join = true
+            forcefully-allow-player-to-join = true
             [online-uuids.services.response-handlers.conditions]
                 "response.code" = "minecraft.invalid_username"
     [[online-uuids.services]]
         name = "MinecraftServices"
         endpoint = "https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"
         json-path-to-uuid = "id"
+        ignore-status-code = true
         [[online-uuids.services.response-handlers]]
-            allow-player-to-join = true
+            forcefully-allow-player-to-join = true
             [online-uuids.services.response-handlers.conditions]
-                "response.errorMessage" = true
+                "::response.errorMessage" = true
                 #"response.errorMessage" = "Couldn't find any profile with name {username}"
 
 # Randomize usernames or uuids on join.
-# Enabling this will disable online uuids if enabled!
+# If this is enabled together with random UUID, online UUIDs will get disabled!
 [randomizer]
     enabled = false
     [randomizer.username]
         randomize = true
         save = false
+        characters = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM123456789_"
     [randomizer.uuid]
         randomize = true
         save = false
