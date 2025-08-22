@@ -1,172 +1,214 @@
 package me.itstautvydas.uuidswapper.config;
 
-import me.itstautvydas.uuidswapper.Utils;
-import me.itstautvydas.uuidswapper.crossplatform.ConfigurationWrapper;
-import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import com.google.gson.annotations.SerializedName;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
+import me.itstautvydas.uuidswapper.enums.ConditionsMode;
+import me.itstautvydas.uuidswapper.enums.FallbackUsage;
+import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
+@Data
 public class Configuration {
-    private final Map<String, ServiceConfiguration> services = new HashMap<>();
-    private ServiceConfiguration defaultServiceConfig;
-    private ConfigurationWrapper config;
+    @Data
+    public static class DatabaseConfiguration {
+        @RequiredProperty
+        private boolean enabled;
+        private boolean downloadDriver = true;
+        @SerializedName("download-link")
+        private String driverDownloadLink;
+        @RequiredProperty
+        @SerializedName("driver")
+        private String driverName;
+        @SerializedName("file")
+        private String fileName;
+        private long timeout = 5000;
+        private long keepOpenTime = 10;
+        private long timerRepeatTime = 1;
+        @SerializedName("debug")
+        private boolean debugEnabled = false;
+    }
 
-    public void load(ConfigurationWrapper config) {
-        services.clear();
+    @Data
+    public static class CachingConfiguration {
+        @RequiredProperty
+        private boolean enabled;
+        private long keepTime = 7200;
+        private boolean useCreatedAt = true;
+        private boolean useUpdatedAt = true;
+    }
 
-        this.config = config;
-        var serviceDefaults = config.getSection("online-uuids.service-defaults");
-        this.defaultServiceConfig = new ServiceConfiguration(serviceDefaults);
+    @Data
+    public static class UsernameChangesConfiguration {
+        private boolean checkDependingOnIpAddress = false;
+        private boolean noRequestsWithExistingUsername = true;
+    }
 
-        // TODO YAML support?
-//        var list = Utils.getTablesWithDefaults("online-uuids.services", config, serviceDefaults);
-        var list = config.getSections("online-uuids.services", serviceDefaults);
-        if (list != null) {
-            for (var service : list) {
-                if (service.contains("name") && service.contains("endpoint"))
-                    services.put(service.getString("name"), new ServiceConfiguration(service));
+    @SuppressWarnings("ConstantValue")
+    @Data
+    public static class ResponseHandlerConfiguration {
+        @RequiredProperty
+        private long order = 9999;
+        @RequiredProperty
+        private ResponseHandlerState state;
+        private Boolean allowPlayerToJoin = null;
+        private Boolean useFallback = null;
+        private boolean applyProperties;
+        private String disconnectMessage;
+        private ConditionsMode conditionsMode = ConditionsMode.AND;
+        private boolean ignoreConditionsCase = false;
+        private Map<String, Object> conditions = new HashMap<>();
+
+        public boolean testConditions(Map<String, Object> placeholders) {
+            if (conditions.isEmpty())
+                return true;
+            Boolean result = null;
+            for (var entry : conditions.entrySet()) {
+                @Nullable var conditionValue = entry.getValue();
+                boolean conditionResult;
+                if (entry.getKey().startsWith("::")) {
+                    if (entry.getValue() instanceof Boolean bool)
+                        conditionResult = placeholders.containsKey(entry.getKey().substring(2)) == bool;
+                    else
+                        conditionResult = false;
+                } else {
+                    @Nullable var value = placeholders.get(entry.getKey());
+                    if (conditionValue == null || value == null) {
+                        conditionResult = Objects.equals(conditionValue, value);
+                    } else {
+                        if (ignoreConditionsCase)
+                            conditionResult = conditionValue.toString().equalsIgnoreCase(value.toString());
+                        else
+                            conditionResult = conditionValue.equals(value);
+                    }
+                }
+                if (result == null) {
+                    result = conditionResult;
+                } else {
+                    if (conditionsMode == ConditionsMode.AND)
+                        result = result && conditionResult;
+                    else
+                        result = result || conditionResult;
+                }
             }
+            return result != null && result;
         }
     }
 
-    public ServiceConfiguration getDefaultService() {
-        return defaultServiceConfig;
+    @Data
+    public static class DefaultServiceConfiguration {
+        private String requestMethod = "GET";
+        private String badUuidDisconnectMessage;
+        private String defaultDisconnectMessage;
+        private String connectionErrorDisconnectMessage;
+        private String serviceBadStatusDisconnectMessage;
+        private String unknownErrorDisconnectMessage;
+        private String serviceTimeoutDisconnectMessage;
+        private int expectStatusCode = 200;
+        private long timeout = 3000;
+        private boolean allowCaching = true;
+        private boolean ignoreStatusCode = false;
+        @SerializedName("debug")
+        private boolean debugEnabled = false;
+        @RequiredProperty
+        private List<FallbackUsage> useFallbacks = new ArrayList<>();
+        private Map<String, String> postData = new HashMap<>();
+        private Map<String, String> queryData = new HashMap<>();
+        private Map<String, String> headers = new HashMap<>();
     }
 
-    public boolean areOnlineUuidsEnabled() {
-        return config.getBoolean("online-uuids.enabled", false);
+    @EqualsAndHashCode(callSuper = true)
+    @Data
+    public static class ServiceConfiguration extends DefaultServiceConfiguration {
+        @RequiredProperty
+        private String name;
+        @RequiredProperty
+        private String endpoint;
+        @RequiredProperty
+        private String jsonPathToUuid;
+        private String jsonPathToProperties;
+        private String jsonPathToTextures;
+        private List<ResponseHandlerConfiguration> responseHandlers = new ArrayList<>();
+
+        public void sortResponseHandlers() {
+            responseHandlers.sort(Comparator.comparingLong(ResponseHandlerConfiguration::getOrder));
+        }
+
+        public ResponseHandlerConfiguration executeResponseHandlers(ResponseHandlerState state, Map<String, Object> placeholders) {
+            for (var handler : responseHandlers) {
+                if (handler.state == state && handler.testConditions(placeholders))
+                    return handler;
+            }
+            return null;
+        }
     }
 
-    private boolean isPlayerExceptional(String value, boolean isUsername) {
-        if (!config.getBoolean("online-uuids.exceptions.enabled"))
-            return true;
-        var reversed = config.getBoolean("online-uuids.exceptions.reversed");
-        var list = config.getList("online-uuids.exceptions.list");
-        if (isUsername)
-            value = "u:" + value;
-        return reversed != list.contains(value);
+    @Data
+    public static class OnlineAuthenticationConfiguration {
+        @RequiredProperty
+        private boolean enabled;
+        @RequiredProperty
+        @SerializedName("use-service")
+        private String serviceName;
+        @RequiredProperty
+        private List<String> fallbackServices;
+        private long fallbackServiceRememberTime = 21600;
+        private long maxTimeout = 6000;
+        private long minTimeout = 1000;
+        private boolean checkForOnlineUuid = true;
+        private boolean sendMessagesToConsole = true;
+        private boolean sendErrorMessagesToConsole = true;
+        private long serviceConnectionThrottle = 5000;
+        private String serviceConnectionThrottledMessage;
+        @RequiredProperty
+        private CachingConfiguration caching;
+        @RequiredProperty
+        private UsernameChangesConfiguration usernameChanges;
+        @RequiredProperty
+        private DefaultServiceConfiguration serviceDefaults;
+        private List<ServiceConfiguration> services = new ArrayList<>();
+
+        public ServiceConfiguration getService(String name) {
+            return services.stream().filter(s -> s.getName().equals(name)).findFirst().orElse(null);
+        }
     }
 
-    private boolean isPlayerExceptional(String username) {
-        return isPlayerExceptional(username, true);
+    @Data
+    public static class RandomizerConfiguration {
+        @Data
+        public static class UuidRandomizer {
+            @RequiredProperty
+            private boolean randomize;
+            @RequiredProperty
+            private boolean save;
+        }
+
+        @EqualsAndHashCode(callSuper = true)
+        @Data
+        public static class UsernameRandomizer extends UuidRandomizer {
+            @RequiredProperty
+            private String characters;
+        }
+
+        @RequiredProperty
+        private boolean enabled;
+        @SerializedName("username") @RequiredProperty
+        private UsernameRandomizer usernameSettings;
+        @SerializedName("uuid") @RequiredProperty
+        private UuidRandomizer uuidSettings;
     }
 
-    private boolean isPlayerExceptional(UUID uuid) {
-        return isPlayerExceptional(uuid.toString(), false);
-    }
-
-    public boolean stillSwapUuids() {
-        return config.getBoolean("online-uuids.swap-uuids", true);
-    }
-
-    public boolean isForcedOfflineModeEnabled() {
-        return PluginWrapper.getCurrent().isServerOnlineMode() && config.getBoolean("forced-offline-mode.enabled", false);
-    }
-
-    public boolean isForcedOfflineModeSetByDefault() {
-        return config.getBoolean("forced-offline-mode.forced-by-default", true);
-    }
-
-    public List<String> getForcedOfflineModeExceptions() {
-        return config.getList("forced-offline-mode.exceptions", new ArrayList<>());
-    }
-
-    public Map<String, Object> getSwappedUuids() {
-        var table = config.getSection("swapped-uuids");
-        if (table == null)
-            return Utils.EMPTY_MAP;
-        return table.toMap();
-    }
-
-    public Map<String, Object> getCustomPlayerNames() {
-        var table = config.getSection("custom-player-names");
-        if (table == null)
-            return Utils.EMPTY_MAP;
-        return table.toMap();
-    }
-
-    public boolean isFilteringEnabled() {
-        return config.getBoolean("online-uuids.exceptions.enabled", false);
-    }
-
-    public boolean isFilteringReversed() {
-        return config.getBoolean("online-uuids.exceptions.reversed", false);
-    }
-
-    public String getServiceName() {
-        return config.getString("online-uuids.use-service");
-    }
-
-    public List<String> getFallbackServices() {
-        return config.getList("online-uuids.fallback-services", new ArrayList<>());
-    }
-
-    public ServiceConfiguration getService(String name) {
-        return services.get(name);
-    }
-
-    public long getMaxTimeout() {
-        return Math.max(500L, config.getLong("online-uuids.max-timeout", 6000L));
-    }
-
-    public long getMinTimeout() {
-        return Math.max(100L, config.getLong("online-uuids.min-timeout", 1000L));
-    }
-
-    public long getFallbackServiceRememberMilliTime() {
-        return Math.max(0L, config.getLong("online-uuids.fallback-service-remember-time", 21600L) * 1000);
-    }
-
-    public boolean getCheckDependingOnIPAddress() {
-        return config.getBoolean("online-uuids.username-changes.check-depending-on-ip-address", false);
-    }
-
-    public boolean getCheckForOnlineUuid() {
-        return config.getBoolean("online-uuids.check-for-online-uuid", true);
-    }
-
-    public boolean getSendSuccessfulMessagesToConsole() {
-        return config.getBoolean("online-uuids.send-messages-to-console", true);
-    }
-
-    public boolean getSendErrorMessagesToConsole() {
-        return config.getBoolean("online-uuids.send-error-messages-to-console", true);
-    }
-
-    public boolean shouldCacheOnlineUuids() {
-        return config.getBoolean("online-uuids.caching.enabled", true);
-    }
-
-    public DatabaseConfiguration getDatabaseConfiguration() {
-        return new DatabaseConfiguration(config.getSection("database"), config);
-    }
-
-    public long getServiceConnectionThrottle() {
-        return config.getLong("online-uuids.service-connection-throttle", 2000L);
-    }
-
-    public String getServiceConnectionThrottleMessage() {
-        return config.getString("online-uuids.service-connection-throttled-message", "::{multiplayer.disconnect.generic}");
-    }
-
-    public boolean isConnectionThrottleDialogEnabled() {
-        return false;
-//        return config.getBoolean("online-uuids.connection-throttle-dialog.enabled", true);
-    }
-
-    public boolean isConnectionThrottleDialogDynamic() {
-        return config.getBoolean("online-uuids.connection-throttle-dialog.dynamic", false);
-    }
-
-    public String getConnectionThrottleDialogMessage() {
-        return config.getString("online-uuids.connection-throttle-dialog.message", "Connecting...");
-    }
-
-    public String getConnectionThrottleDialogTitle() {
-        return config.getString("online-uuids.connection-throttle-dialog.title", "Service connection throttled!");
-    }
-
-    public String getConnectionThrottleDialogButtonText() {
-        return config.getString("online-uuids.connection-throttle-dialog.button", "::{menu.disconnect}");
-    }
+    @RequiredProperty
+    private OnlineAuthenticationConfiguration onlineAuthentication;
+    @RequiredProperty
+    private DatabaseConfiguration database;
+    @RequiredProperty
+    private RandomizerConfiguration playerRandomizer;
+    @RequiredProperty
+    private Map<String, String> swappedUuids;
+    @RequiredProperty
+    private Map<String, String> customPlayerNames;
 }
