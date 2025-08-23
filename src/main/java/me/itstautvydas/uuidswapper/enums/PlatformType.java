@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 public enum PlatformType {
     VELOCITY("Velocity"),
-    BUNGEE("BungeeCord");
+    BUNGEE("BungeeCord"),
+    PAPER("Paper");
     final String name;
 }
