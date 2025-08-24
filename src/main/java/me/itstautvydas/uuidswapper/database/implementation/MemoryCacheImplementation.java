@@ -1,7 +1,7 @@
 package me.itstautvydas.uuidswapper.database.implementation;
 
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
-import me.itstautvydas.uuidswapper.data.RandomPlayerData;
+import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
 
 import java.util.ArrayList;
@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public class MemoryCacheImplementation extends DriverImplementation {
     private final List<OnlinePlayerData> onlineOnlinePlayerData = new ArrayList<>();
-    private final List<RandomPlayerData> randomPlayerCache = new ArrayList<>();
+    private final List<PlayerData> randomPlayerCache = new ArrayList<>();
 
     @Override
     public void init() {
@@ -55,14 +55,14 @@ public class MemoryCacheImplementation extends DriverImplementation {
     }
 
     @Override
-    public void storeRandomPlayerCache(RandomPlayerData player) {
+    public void storeRandomPlayerCache(PlayerData player) {
         randomPlayerCache.add(player);
     }
 
     @Override
-    public RandomPlayerData getRandomPlayerCache(UUID uuid) {
+    public PlayerData getRandomPlayerCache(UUID uuid) {
         return randomPlayerCache.stream()
-                .filter(player -> player.getOriginalUuid().equals(uuid))
+                .filter(player -> player.getOriginalUniqueId().equals(uuid))
                 .findFirst()
                 .orElse(null);
     }

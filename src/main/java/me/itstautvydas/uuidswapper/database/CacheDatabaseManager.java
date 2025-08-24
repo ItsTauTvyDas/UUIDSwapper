@@ -21,10 +21,10 @@ public class CacheDatabaseManager {
 
     private final Map<String, Supplier<DriverImplementation>> registry = new HashMap<>();
 
-    public void init() {
+    public CacheDatabaseManager() {
         registerDriver("SQLite", SQLiteImplementation::new);
         registerDriver("Memory", MemoryCacheImplementation::new);
-        initDriverFromConfiguration();
+        loadDriverFromConfiguration();
     }
 
     public void registerDriver(String name, Supplier<DriverImplementation> driver) {
@@ -50,7 +50,7 @@ public class CacheDatabaseManager {
         try {
             driver.clearConnection();
         } catch (Exception ex) {
-            PluginWrapper.getCurrent().logError("[DatabaseManager]: Failed to close {} driver's connection!", ex, driver.getName());
+            PluginWrapper.getCurrent().logError("DatabaseManager", "Failed to close {} driver's connection!", ex, driver.getName());
         }
     }
 
@@ -81,11 +81,14 @@ public class CacheDatabaseManager {
         timeCounter = -1;
     }
 
-    public void initDriverFromConfiguration() {
+    public boolean loadDriverFromConfiguration() {
         clean();
         var name = getConfiguration().getDriverName();
-        if (setDriverImplementation(name) == null)
+        if (setDriverImplementation(name) == null) {
             PluginWrapper.getCurrent().logError("[DatabaseManager]: Failed to load {} driver!", null, name);
+            return false;
+        }
+        return true;
     }
 
     public Boolean setDriverImplementation(String name) {
@@ -123,7 +126,6 @@ public class CacheDatabaseManager {
             return false;
         }
         this.driver = driver;
-        resetTimer();
         return true;
     }
 

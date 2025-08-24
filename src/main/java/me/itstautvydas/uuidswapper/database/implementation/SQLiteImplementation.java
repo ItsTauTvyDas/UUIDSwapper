@@ -2,7 +2,7 @@ package me.itstautvydas.uuidswapper.database.implementation;
 
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
-import me.itstautvydas.uuidswapper.data.RandomPlayerData;
+import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
 
 import java.nio.file.Path;
@@ -200,12 +200,12 @@ public class SQLiteImplementation extends DriverImplementation {
     }
 
     @Override
-    public void storeRandomPlayerCache(RandomPlayerData player) {
+    public void storeRandomPlayerCache(PlayerData player) {
 
     }
 
     @Override
-    public RandomPlayerData getRandomPlayerCache(UUID uuid) {
+    public PlayerData getRandomPlayerCache(UUID uuid) {
         return null;
     }
 }

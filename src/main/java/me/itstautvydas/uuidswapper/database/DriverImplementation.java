@@ -4,7 +4,7 @@ import lombok.Getter;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
-import me.itstautvydas.uuidswapper.data.RandomPlayerData;
+import me.itstautvydas.uuidswapper.data.PlayerData;
 
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -34,7 +34,7 @@ public abstract class DriverImplementation {
     protected final void init(CacheDatabaseManager manager, String driverName) {
         this.manager = manager;
         this.name = driverName;
-        this.prefix = "[DatabaseManager/" + driverName + "]: ";
+        this.prefix = "DatabaseManager/" + driverName;
     }
 
     protected boolean downloadDriverAndLoad() {
@@ -90,9 +90,8 @@ public abstract class DriverImplementation {
     }
 
     public final boolean shouldCreateNewConnection(Object connection) {
-        if (getManager().shouldConnectionBeCached()) {
+        if (getManager().shouldConnectionBeCached())
             getManager().resetCounter();
-        }
         return connection == null;
     }
     
@@ -129,6 +128,6 @@ public abstract class DriverImplementation {
     public abstract OnlinePlayerData getOnlinePlayerCache(String address) throws Exception;
     public abstract OnlinePlayerData getOnlinePlayerCache(UUID uuid) throws Exception;
 
-    public abstract void storeRandomPlayerCache(RandomPlayerData player) throws Exception;
-    public abstract RandomPlayerData getRandomPlayerCache(UUID uuid) throws Exception;
+    public abstract void storeRandomPlayerCache(PlayerData player) throws Exception;
+    public abstract PlayerData getRandomPlayerCache(UUID uuid) throws Exception;
 }
