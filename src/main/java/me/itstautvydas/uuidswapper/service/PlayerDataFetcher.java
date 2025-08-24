@@ -8,14 +8,14 @@ import lombok.experimental.UtilityClass;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.data.Message;
-import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
-import me.itstautvydas.uuidswapper.data.ProfileProperty;
-import me.itstautvydas.uuidswapper.data.ResponseData;
+import me.itstautvydas.uuidswapper.data.*;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
 import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
+import me.itstautvydas.uuidswapper.helper.SimplifiedLogger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -29,13 +29,16 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 
 @UtilityClass
-@Getter
 public class PlayerDataFetcher {
     private static final Map<UUID, OnlinePlayerData> fetchedPlayerData = new ConcurrentHashMap<>();
+    private static final Map<UUID, PlayerData> pretendMap = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> throttledConnections = new ConcurrentHashMap<>();
     private static volatile String lastUsedService;
     private static volatile long lastUsedServiceAt;
     private static final HttpClient client;
+
+    @Getter
+    private static volatile boolean busy;
 
     static {
         client = HttpClient.newHttpClient();
@@ -43,6 +46,45 @@ public class PlayerDataFetcher {
 
     public static OnlinePlayerData pullPlayerData(UUID originalUniqueId) {
         return fetchedPlayerData.remove(originalUniqueId);
+    }
+
+    public static PlayerData pullPretender(UUID originalUniqueId) {
+        return pretendMap.remove(originalUniqueId);
+    }
+
+    public static PlayerData pretend(
+            UUID originalUniqueId,
+            String username,
+            UUID uniqueId,
+            boolean tryFetchProperties,
+            SimplifiedLogger logger
+    ) {
+        Objects.requireNonNull(originalUniqueId);
+        Objects.requireNonNull(username);
+        Objects.requireNonNull(logger);
+
+        if (tryFetchProperties) {
+            // Try fetch to get profile's properties
+            var data = getPlayerData(username, originalUniqueId, "", false, false, true, logger).join();
+            if (data.containsFirst()) {
+                var playerData = new PlayerData(
+                        originalUniqueId,
+                        username,
+                        uniqueId == null ? data.getFirst().getOnlineUuid() : uniqueId
+                );
+                playerData.setProperties(data.getFirst().getProperties());
+                pretendMap.put(originalUniqueId, playerData);
+                return playerData;
+            }
+            return null;
+        } else {
+            if (uniqueId == null)
+                uniqueId = Utils.generateOfflineUniqueId(username);
+            var data = new PlayerData(originalUniqueId, username, uniqueId);
+            data.setProperties(new ArrayList<>());
+            pretendMap.put(originalUniqueId, data);
+            return data;
+        }
     }
 
     @Locked
@@ -73,20 +115,26 @@ public class PlayerDataFetcher {
     }
 
     private static String getPrefix(String name) {
-        return "[PlayerDataFetcher/" + name + "]: ";
+        return "PlayerDataFetcher/" + name;
     }
 
+    @NotNull
     public static CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> getPlayerData(
-            String username,
-            UUID uniqueId,
-            String remoteAddress,
-            boolean cacheFetchedData
+            @NotNull String username,
+            @Nullable UUID uniqueId,
+            @NotNull String remoteAddress,
+            boolean cacheFetchedData,
+            boolean cacheDatabase,
+            boolean forceErrorMessages,
+            @Nullable SimplifiedLogger logger
     ) {
+        busy = true;
         final var plugin = PluginWrapper.getCurrent();
         final var config = plugin.getConfiguration().getOnlineAuthentication();
         final var database = plugin.getDatabase();
+        final var finalLogger = logger == null ? plugin : logger;
 
-        var originalUuid = Utils.requireUuid(username, uniqueId); // Pre-1.20.1
+        final var originalUuid = uniqueId == null ? Utils.requireUuid(username, uniqueId) : uniqueId;
         return CompletableFuture.supplyAsync(() -> {
             OnlinePlayerData fetchedPlayerData = null;
             var messageHolder = new ObjectHolder<Message>(null);
@@ -114,11 +162,11 @@ public class PlayerDataFetcher {
                 Configuration.ServiceConfiguration service = config.getService(name);
 
                 if (i == 1 && config.isSendErrorMessagesToConsole())
-                    plugin.logWarning("Defined service's name in 'use-service' failed, using fallback ones!", null);
+                    finalLogger.logWarning("Defined service's name in 'use-service' failed, using fallback ones!", null);
 
                 if (service == null) {
                     if (config.isSendErrorMessagesToConsole())
-                        plugin.logWarning("Service called '{}' doesn't exist! Skipping", null, name);
+                        finalLogger.logWarning("Service called '{}' doesn't exist! Skipping", null, name);
                     continue;
                 }
 
@@ -134,10 +182,11 @@ public class PlayerDataFetcher {
                     }
                 }
 
+                boolean sendDebugMessages = service.isDebugEnabled();
                 boolean sendMessages = config.isSendMessagesToConsole()
-                        || service.isDebugEnabled();
+                        || sendDebugMessages;
                 boolean sendErrorMessages = config.isSendErrorMessagesToConsole()
-                        || service.isDebugEnabled();
+                        || sendDebugMessages || forceErrorMessages;
 
                 disconnectMessage = service.getDefaultDisconnectMessage();
                 String prefix = getPrefix(name);
@@ -148,8 +197,8 @@ public class PlayerDataFetcher {
                     placeholders.put("uuid", originalUuid.toString());
 
                     String queryString = Utils.replacePlaceholders(Utils.buildDataString(service.getQueryData()), placeholders);
-                    if (service.isDebugEnabled())
-                        plugin.logInfo(prefix, "DEBUG - {}'s original UUID - {}", username, originalUuid);
+                    if (sendDebugMessages)
+                        finalLogger.logInfo(prefix, "DEBUG - {}'s original UUID - {}", username, originalUuid);
                     String endpoint = Utils.replacePlaceholders(service.getEndpoint(), placeholders);
                     HttpRequest.Builder builder = HttpRequest.newBuilder();
 
@@ -172,8 +221,8 @@ public class PlayerDataFetcher {
 
                     var timeout = config.getMaxTimeout() - timeoutCounter;
                     if (timeout <= config.getMinTimeout()) {
-                        if (service.isDebugEnabled())
-                            plugin.logWarning(prefix, "DEBUG - Timed out, current timeout value - {}, min timeout - {}", null, timeout, config.getMinTimeout());
+                        if (sendDebugMessages)
+                            finalLogger.logWarning(prefix, "DEBUG - Timed out, current timeout value - {}, min timeout - {}", null, timeout, config.getMinTimeout());
                         disconnectMessage = service.getServiceTimeoutDisconnectMessage();
                         break;
                     }
@@ -202,10 +251,10 @@ public class PlayerDataFetcher {
                         }
 
                         if (sendErrorMessages)
-                            plugin.logError(prefix, "Connection error ({}), failed to fetch UUID from the service!",
+                            finalLogger.logError(prefix, "Connection error ({}), failed to fetch UUID from the service!",
                                     null, result.getException().getClass().getName());
-                        if (service.isDebugEnabled())
-                            plugin.logError(result.getException().getMessage(), result.getException());
+                        if (sendDebugMessages)
+                            finalLogger.logError(result.getException().getMessage(), result.getException());
 
                         if (shouldDisconnect)
                             break;
@@ -223,11 +272,11 @@ public class PlayerDataFetcher {
                     placeholders.put("timeout-left", String.valueOf(timeout));
 
                     timeoutCounter += took;
-                    if (service.isDebugEnabled())
-                        plugin.logInfo(prefix, "DEBUG - Took {}ms ({}/{}ms - added up timeout/max timeout) to fetch data.", took, timeoutCounter, config.getMaxTimeout());
+                    if (sendDebugMessages)
+                        finalLogger.logInfo(prefix, "DEBUG - Took {}ms ({}/{}ms - added up timeout/max timeout) to fetch data.", took, timeoutCounter, config.getMaxTimeout());
                     if (!service.isIgnoreStatusCode() && response.statusCode() != service.getExpectStatusCode()) {
                         if (sendErrorMessages)
-                            plugin.logError(prefix, "Returned wrong HTTP status code! Got {}, expected {}.",
+                            finalLogger.logError(prefix, "Returned wrong HTTP status code! Got {}, expected {}.",
                                     null, response.statusCode(), service.getExpectStatusCode());
                         disconnectMessage = service.getServiceBadStatusDisconnectMessage();
                         if (!service.getUseFallbacks().contains(FallbackUsage.ON_BAD_STATUS))
@@ -240,8 +289,8 @@ public class PlayerDataFetcher {
                         responseBody = JsonParser.parseString(response.body());
                     } catch (Exception ex) {
                         responseBody = response.body();
-                        if (service.isDebugEnabled())
-                            plugin.logInfo(prefix, "DEBUG - Body does not have valid JSON, parsing as text => {}",
+                        if (sendDebugMessages)
+                            finalLogger.logInfo(prefix, "DEBUG - Body does not have valid JSON, parsing as text => {}",
                                     responseBody.toString().replaceAll("\\R+", ""));
                     }
 
@@ -274,9 +323,9 @@ public class PlayerDataFetcher {
                     } catch (Exception ex) {
                         Utils.addExceptionPlaceholders(ex, placeholders);
                         if (sendErrorMessages)
-                            plugin.logError(prefix, "Failed, invalid JSON path to UUID - {}", null, service.getJsonPathToUuid());
-                        if (service.isDebugEnabled())
-                            plugin.logError(ex.getMessage(), ex);
+                            finalLogger.logError(prefix, "Failed, invalid JSON path to UUID - {}", null, service.getJsonPathToUuid());
+                        if (sendDebugMessages)
+                            finalLogger.logError(ex.getMessage(), ex);
                         uniqueIdString = null;
                     }
 
@@ -305,9 +354,9 @@ public class PlayerDataFetcher {
                     } catch (Exception ex) {
                         Utils.addExceptionPlaceholders(ex, placeholders);
                         if (sendErrorMessages)
-                            plugin.logError(prefix, "Failed to convert '{}' to UUID!", null, uniqueIdString.replaceAll("\\R+", ""));
-                        if (service.isDebugEnabled())
-                            plugin.logError(ex.getMessage(), ex);
+                            finalLogger.logError(prefix, "Failed to convert '{}' to UUID!", null, uniqueIdString.replaceAll("\\R+", ""));
+                        if (sendDebugMessages)
+                            finalLogger.logError(ex.getMessage(), ex);
                         disconnectMessage = service.getBadUuidDisconnectMessage();
                         if (!service.getUseFallbacks().contains(FallbackUsage.ON_INVALID_UUID))
                             break;
@@ -322,7 +371,6 @@ public class PlayerDataFetcher {
                         if (path != null) {
                             try {
                                 var propertiesJsonElement = Utils.getJsonValue(element, path);
-                                System.out.println(propertiesJsonElement);
                                 if (propertiesJsonElement.isJsonArray()) {
                                     properties = propertiesJsonElement.getAsJsonArray()
                                             .asList()
@@ -345,33 +393,34 @@ public class PlayerDataFetcher {
                                 }
                             } catch (Exception ex) {
                                 if (sendErrorMessages)
-                                    plugin.logError(prefix, "Failed to fetch profile's properties!", null);
-                                if (service.isDebugEnabled())
-                                    plugin.logError(ex.getMessage(), ex);
+                                    finalLogger.logError(prefix, "Failed to fetch profile's properties!", null);
+                                if (sendDebugMessages)
+                                    finalLogger.logError(ex.getMessage(), ex);
                             }
                         }
                     }
 
                     if (config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
                         fetchedPlayerData = new OnlinePlayerData(originalUuid, fetchedUniqueId, properties, remoteAddress, System.currentTimeMillis(), null);
-                        database.storeOnlinePlayerCache(fetchedPlayerData);
+                        if (cacheDatabase)
+                            database.storeOnlinePlayerCache(fetchedPlayerData);
                     } else {
                         fetchedPlayerData = new OnlinePlayerData(originalUuid, fetchedUniqueId, properties, null, System.currentTimeMillis(), null);
                     }
 
                     if (sendMessages)
-                        plugin.logInfo(prefix, "UUID successfully fetched for {} => {}", username, fetchedUniqueId);
+                        finalLogger.logInfo(prefix, "UUID successfully fetched for {} => {}", username, fetchedUniqueId);
 
                     if (cacheFetchedData)
-                        PlayerDataFetcher.fetchedPlayerData.put(uniqueId, fetchedPlayerData);
+                        PlayerDataFetcher.fetchedPlayerData.put(originalUuid, fetchedPlayerData);
                     disconnect = false;
                     break;
                 } catch (Exception ex) {
                     Utils.addExceptionPlaceholders(ex, placeholders);
                     if (sendErrorMessages)
-                        plugin.logError(prefix, "Unknown error, failed to fetch UUID from the service!", ex);
-                    if (service.isDebugEnabled())
-                        plugin.logError(ex.getMessage(), ex);
+                        finalLogger.logError(prefix, "Unknown error, failed to fetch UUID from the service!", ex);
+                    if (sendDebugMessages)
+                        finalLogger.logError(ex.getMessage(), ex);
                     disconnectMessage = service.getUnknownErrorDisconnectMessage();
                     if (!service.getUseFallbacks().contains(FallbackUsage.ON_UNKNOWN_ERROR))
                         break;
@@ -394,6 +443,7 @@ public class PlayerDataFetcher {
             }
             if (config.getServiceConnectionThrottle() > 0)
                 throttledConnections.put(uniqueId, System.currentTimeMillis());
+            busy = false;
             return new BiObjectHolder<>(fetchedPlayerData, message);
         });
     }
