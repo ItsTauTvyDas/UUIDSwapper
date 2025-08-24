@@ -162,6 +162,7 @@ public class Configuration {
         private boolean sendMessagesToConsole = true;
         private boolean sendErrorMessagesToConsole = true;
         private long serviceConnectionThrottle = 5000;
+        @RequiredProperty
         private String serviceConnectionThrottledMessage;
         @RequiredProperty
         private CachingConfiguration caching;
@@ -172,7 +173,10 @@ public class Configuration {
         private List<ServiceConfiguration> services = new ArrayList<>();
 
         public ServiceConfiguration getService(String name) {
-            return services.stream().filter(s -> s.getName().equals(name)).findFirst().orElse(null);
+            return services.stream()
+                    .filter(s -> s.getName().equals(name))
+                    .findFirst()
+                    .orElse(null);
         }
     }
 
@@ -201,14 +205,38 @@ public class Configuration {
         private UuidRandomizer uuidSettings;
     }
 
-    @RequiredProperty
-    private OnlineAuthenticationConfiguration onlineAuthentication;
+    @Data
+    public static class CommandMessagesConfiguration {
+        @RequiredProperty
+        private String prefix;
+        @RequiredProperty
+        private String noArguments;
+        @RequiredProperty
+        private String reloadSuccess;
+        @RequiredProperty
+        private String reloadDatabaseDriverFailed;
+        @RequiredProperty
+        private String reloadFetcherBusy;
+        @RequiredProperty
+        private String reloadFailed;
+        @RequiredProperty
+        private String playerPretendSuccess;
+        @RequiredProperty
+        private String playerPretendFailed;
+        @RequiredProperty
+        private String debugHeader;
+    }
+
     @RequiredProperty
     private DatabaseConfiguration database;
     @RequiredProperty
+    private OnlineAuthenticationConfiguration onlineAuthentication;
+    @RequiredProperty
     private RandomizerConfiguration playerRandomizer;
+    @RequiredProperty
+    private Map<String, String> customPlayerNames;
     @RequiredProperty
     private Map<String, String> swappedUuids;
     @RequiredProperty
-    private Map<String, String> customPlayerNames;
+    private CommandMessagesConfiguration commandMessages;
 }
