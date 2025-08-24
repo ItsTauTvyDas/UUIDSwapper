@@ -54,12 +54,8 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
 
         if (completableFuture != null) {
             event.registerIntent(this);
-            ProxyServer.getInstance().getScheduler().runAsync(this, () -> {
-                var fetchedData = completableFuture.join();
-                if (fetchedData != null && fetchedData.containsFirst())
-                    event.getConnection().setUniqueId(fetchedData.getFirst().getOnlineUuid());
-                changeGameProfile(event.getConnection());
-            });
+            ProxyServer.getInstance().getScheduler().runAsync(this, completableFuture::join);
+            changeGameProfile(event.getConnection());
             event.completeIntent(this);
         } else {
             changeGameProfile(event.getConnection());
@@ -93,10 +89,6 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
             }
             if (uniqueId != null)
                 uniqueIdField.set(connection, uniqueId);
-
-            System.out.println(newUsername);
-            System.out.println(uniqueId);
-            System.out.println(properties);
 
             if (loginProfileField == null) {
                 loginProfileField = connection.getClass().getDeclaredField("loginProfile");
