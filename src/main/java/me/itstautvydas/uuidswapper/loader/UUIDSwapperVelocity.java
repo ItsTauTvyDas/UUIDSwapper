@@ -25,13 +25,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 
 @Plugin(id = "uuid-swapper",
-        name = "UUIDSwapper",
+        name = BuildConstants.NAME,
         version = BuildConstants.VERSION,
-        description = "Swap player names or UUID, use online UUIDs for offline mode!",
-        url = "https://itstautvydas.me",
+        description = BuildConstants.DESCRIPTION,
+        url = BuildConstants.WEBSITE,
         authors = { "ItsTauTvyDas" })
 public class UUIDSwapperVelocity {
-
     @Inject
     public UUIDSwapperVelocity(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
         PluginWrapper.init(PlatformType.VELOCITY, this, server, logger, dataDirectory);
@@ -66,20 +65,9 @@ public class UUIDSwapperVelocity {
                         }
                     }
                 }
-        ).join();
+        );
         continuation.resume();
     }
-
-//    @Subscribe
-//    public void onPlayerLogin(PlayerConfigurationEvent event) {
-//        if (config.isConnectionThrottleDialogEnabled())
-//            return;
-//        var throttledWhen = throttlesConnections.get(event.getPlayer().getUniqueId());
-//        if (throttledWhen != null) {
-//            var throttle = config.getServiceConnectionThrottle();
-//            long secondsLeft = ((throttledWhen + throttle) - System.currentTimeMillis()) / 1000;
-//        }
-//    }
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
