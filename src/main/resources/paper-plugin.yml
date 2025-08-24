@@ -1,6 +1,8 @@
 name: UUIDSwapper
-main: me.itstautvydas.uuidswapper.loader.UUIDSwapperBungeeCord
+api-version: '1.21.8'
+main: me.itstautvydas.uuidswapper.loader.UUIDSwapperPaper
 version: '${version}'
 description: '${description}'
 author: ItsTauTvyDas
+folia-supported: true
 website: ${website}
