@@ -35,12 +35,12 @@
     },
     "service-defaults": {
       "expect-status-code": 200,
-      "bad-uuid-disconnect-message": "<red>Failed to get your online UUID (bad UUID), contact server's administrator!",
-      "default-disconnect-message": "<red>Failed to get your online UUID",
-      "connection-error-disconnect-message": "<red>Failed to get your online UUID (connection error), contact server's administrator!",
-      "service-bad-status-disconnect-message": "<red>Failed to get your online UUID (service returned {http.status}), contact server's administrator!",
-      "unknown-error-disconnect-message": "<red>Failed to get your online UUID (unknown error), contact server's administrator!",
-      "service-timeout-disconnect-message": "<red>Failed to get your online UUID (service timed out), try again later!",
+      "bad-uuid-disconnect-message": "&cFailed to get your online UUID (bad UUID), contact server's administrator!",
+      "default-disconnect-message": "&cFailed to get your online UUID",
+      "connection-error-disconnect-message": "&cFailed to get your online UUID (connection error), contact server's administrator!",
+      "service-bad-status-disconnect-message": "&cFailed to get your online UUID (service returned {http.status}), contact server's administrator!",
+      "unknown-error-disconnect-message": "&cFailed to get your online UUID (unknown error), contact server's administrator!",
+      "service-timeout-disconnect-message": "&cFailed to get your online UUID (service timed out), try again later!",
       "timeout": 3000,
       "allow-caching": true,
       "use-fallbacks": [
@@ -107,5 +107,32 @@
   "custom-player-names": {
     "u:Notch": "Herobrine",
     "00000000-0000-0000-0000-000000000000": "jeb_"
+  },
+  "command-messages": {
+    "prefix": "&b[UUIDSwapper] &r",
+    "no-arguments": [
+      "{prefix} Available sub-commands:",
+      "&eReload configuration&r",
+      "  /{command} reload",
+      "&eSet player's new username, properties and UUID on next login. Resets after second re-login!",
+      "UUID is optional, if not defined, we will try to fetch the UUID from existing services, offline UUID otherwise.&r",
+      "  /{command} pretend <new username> [fetch properties?] [new UUID]",
+      "&eDebug plugin internal data.&r",
+      "  /{command} debug",
+      "&eTest service. UUID is optional, if empty - offline UUID will be made based on the username.&r",
+      "  /{command} test <service> <username> [UUID]"
+    ],
+    "reload-success": "{prefix}&aPlugin successfully reloaded!",
+    "reload-database-driver-failed": "{prefix}&rFailed to load {driver} driver from configuration!",
+    "reload-fetcher-busy": "{prefix}&cPlayerDataFetched is busy, configuration cannot be reloaded!",
+    "reload-failed": "{prefix}&cFailed to reload configuration, check console for full error - {exception_message}",
+    "player-pretend-success": [
+      "{prefix}Your player data was changed:",
+      "{prefix}  New username -> &a{new_username}",
+      "{prefix}  New UUID -> &a{new_uuid}",
+      "{prefix}Relog in order to log as that player. &cIf you log out from that player, you will get logged back in your original player!"
+    ],
+    "player-pretend-failed": "{prefix}&cFailed to pretend a player, check console for full error",
+    "debug-header": "{prefix}&eDebug information"
   }
 }
