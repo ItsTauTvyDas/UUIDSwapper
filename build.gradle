@@ -1,15 +1,27 @@
 import org.bxteam.runserver.RunServerTask
+import java.security.MessageDigest
 
 plugins {
-    id 'java'
-    id 'eclipse'
-    id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
-    id 'xyz.jpenilla.run-velocity' version "2.3.1"
-    id 'org.bxteam.runserver' version '1.2.2'
+    id "java"
+    id "eclipse"
+    id "org.jetbrains.gradle.plugin.idea-ext" version "1.1.8"
+    id "org.bxteam.runserver" version "1.2.2"
 }
 
-group = 'me.itstautvydas'
-version = '1.0.0'
+group = "me.itstautvydas"
+version = "1.0.0"
+
+// Variables
+def targetJavaVersion = 17
+def paperTargetJavaVersion = 21
+def props = [
+        "version": project.version,
+        "config_version": md5(file("src/main/resources/configuration.json")),
+        "name": project.name,
+        "lower_cased_name": project.name.toLowerCase(),
+        "website": "https://itstautvydas.me",
+        "description": "Swap player names or UUID, use online UUIDs for offline mode!"
+]
 
 repositories {
     mavenCentral()
@@ -22,48 +34,42 @@ repositories {
         url = "https://oss.sonatype.org/content/groups/public/"
     }
     maven {
-        url 'https://oss.sonatype.org/content/repositories/snapshots'
+        url = "https://oss.sonatype.org/content/repositories/snapshots"
     }
 }
 
 dependencies {
-    implementation("org.projectlombok:lombok:1.18.38")
+    compileOnly "org.projectlombok:lombok:1.18.38"
+    annotationProcessor "org.projectlombok:lombok:1.18.38"
 
-    implementation('net.md-5:bungeecord-api:1.21-R0.4-SNAPSHOT')
-    implementation("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
-
-    annotationProcessor("org.projectlombok:lombok:1.18.38")
-    annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
+    compileOnly "net.md-5:bungeecord-api:1.21-R0.4-SNAPSHOT"
+    compileOnly "com.velocitypowered:velocity-api:3.4.0-SNAPSHOT"
+    // Paper API is being added below
 }
 
-tasks {
-    runVelocity {
-        // Configure the Velocity version for our task.
-        // This is the only required configuration besides applying the plugin.
-        // Your plugin's jar (or shadowJar if present) will be used automatically.
-        velocityVersion("3.4.0-SNAPSHOT")
-    }
-}
-
-def targetJavaVersion = 17
+// Java compiling
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+    options.encoding = "UTF-8"
     options.release.set(targetJavaVersion)
 }
 
-def templateSource = file('src/main/templates')
-def templateDest = layout.buildDirectory.dir('generated/sources/templates')
-def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
-    def props = ['version': project.version]
+// Resources processing
+def generateTemplates = tasks.register("generateTemplates", Copy) { task ->
     task.inputs.properties props
-
-    task.from templateSource
-    task.into templateDest
+    task.from file("src/main/templates")
+    task.into layout.buildDirectory.dir("generated/sources/templates")
     task.expand props
+}
+
+processResources {
+    inputs.properties props
+    filesMatching("**/*") {
+        expand props
+    }
 }
 
 sourceSets.main.java.srcDir(generateTemplates.map { it.outputs })
@@ -71,21 +77,84 @@ sourceSets.main.java.srcDir(generateTemplates.map { it.outputs })
 project.idea.project.settings.taskTriggers.afterSync generateTemplates
 project.eclipse.synchronizationTasks(generateTemplates)
 
-tasks.register('runBungeeCord', RunServerTask) {
+// Compile Paper plugin classes with Java 21
+sourceSets.main.java {
+    exclude "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java",
+            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+}
+
+sourceSets {
+    paperImplementation {
+        java {
+            srcDir "src/main/java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+        }
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+dependencies {
+    paperImplementationCompileOnly "io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT"
+}
+
+tasks.named("compilePaperImplementationJava") {
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(paperTargetJavaVersion)
+    }
+    options.release = paperTargetJavaVersion
+}
+
+tasks.jar {
+    dependsOn(tasks.named("compilePaperImplementationJava"))
+    from(sourceSets.paperImplementation.output) {
+        into("META-INF/versions/${paperTargetJavaVersion}")
+    }
+    manifest {
+        attributes("Multi-Release": "true")
+    }
+}
+
+// Functions
+
+static def md5(File file) {
+    MessageDigest md = MessageDigest.getInstance("MD5")
+    file.withInputStream { is ->
+        byte[] buffer = new byte[8192]
+        int read
+        while ((read = is.read(buffer)) > 0)
+            md.update(buffer, 0, read)
+    }
+    return md.digest().encodeHex().toString()
+}
+
+// Testing
+
+tasks.register("runBungeeCord", RunServerTask) {
+    group = "minecraft-server-test"
+    description = "Run a BungeeCord server"
+
     serverType = "BUNGEECORD"
     serverVersion("1.21")
     noGui(true)
     acceptMojangEula()
 }
 
-tasks.register('runPaper', RunServerTask) {
+tasks.register("runPaper", RunServerTask) {
+    group = "minecraft-server-test"
+    description = "Run a BungeeCord server"
+
     serverType = "PAPER"
     serverVersion("1.21.8")
     noGui(true)
     acceptMojangEula()
 }
 
-tasks.register('runFolia', RunServerTask) {
+tasks.register("runFolia", RunServerTask) {
+    group = "minecraft-server-test"
+    description = "Run a BungeeCord server"
+
     serverType = "FOLIA"
     serverVersion("1.21.8")
     noGui(true)
