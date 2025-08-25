@@ -42,6 +42,8 @@ dependencies {
     compileOnly "org.projectlombok:lombok:1.18.38"
     annotationProcessor "org.projectlombok:lombok:1.18.38"
 
+    annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
+
     compileOnly "net.md-5:bungeecord-api:1.21-R0.4-SNAPSHOT"
     compileOnly "com.velocitypowered:velocity-api:3.4.0-SNAPSHOT"
     // Paper API is being added below
@@ -131,7 +133,7 @@ static def md5(File file) {
 
 // Testing
 
-tasks.register("runBungeeCord", RunServerTask) {
+tasks.register("BungeeCord", RunServerTask) {
     group = "minecraft-server-test"
     description = "Run a BungeeCord server"
 
@@ -141,9 +143,9 @@ tasks.register("runBungeeCord", RunServerTask) {
     acceptMojangEula()
 }
 
-tasks.register("runPaper", RunServerTask) {
+tasks.register("Paper", RunServerTask) {
     group = "minecraft-server-test"
-    description = "Run a BungeeCord server"
+    description = "Run a Paper server"
 
     serverType = "PAPER"
     serverVersion("1.21.8")
@@ -151,12 +153,22 @@ tasks.register("runPaper", RunServerTask) {
     acceptMojangEula()
 }
 
-tasks.register("runFolia", RunServerTask) {
+tasks.register("Folia", RunServerTask) {
     group = "minecraft-server-test"
-    description = "Run a BungeeCord server"
+    description = "Run a Folia server"
 
     serverType = "FOLIA"
     serverVersion("1.21.8")
+    noGui(true)
+    acceptMojangEula()
+}
+
+tasks.register("Velocity", RunServerTask) {
+    group = "minecraft-server-test"
+    description = "Run a Velocity server"
+
+    serverType = "VELOCITY"
+    serverVersion("3.4.0-SNAPSHOT")
     noGui(true)
     acceptMojangEula()
 }
