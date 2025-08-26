@@ -46,7 +46,7 @@ dependencies {
 
     compileOnly "net.md-5:bungeecord-api:1.21-R0.4-SNAPSHOT"
     compileOnly "com.velocitypowered:velocity-api:3.4.0-SNAPSHOT"
-    // Paper API is being added below
+    // Paper/Folia API is being added below
 }
 
 // Java compiling
@@ -74,19 +74,22 @@ processResources {
     }
 }
 
-sourceSets.main.java.srcDir(generateTemplates.map { it.outputs })
+sourceSets.main.java.srcDir(generateTemplates.map {
+    it.outputs
+})
 
 project.idea.project.settings.taskTriggers.afterSync generateTemplates
 project.eclipse.synchronizationTasks(generateTemplates)
 
-// Compile Paper plugin classes with Java 21
+// Compile Paper/Folia plugin classes with Java 21
 sourceSets.main.java {
     exclude "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java",
-            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java",
+            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/FoliaPluginWrapper.java"
 }
 
 sourceSets {
-    paperImplementation {
+    paper {
         java {
             srcDir "src/main/java"
             include "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java"
@@ -95,13 +98,31 @@ sourceSets {
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
     }
+    folia {
+        java {
+            srcDir "src/main/java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/FoliaPluginWrapper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+        }
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
 }
 
 dependencies {
-    paperImplementationCompileOnly "io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT"
+    foliaCompileOnly "dev.folia:folia-api:1.21.8-R0.1-SNAPSHOT"
+    paperCompileOnly "io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT"
 }
 
-tasks.named("compilePaperImplementationJava") {
+tasks.named("compilePaperJava") {
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(paperTargetJavaVersion)
+    }
+    options.release = paperTargetJavaVersion
+}
+
+tasks.named("compileFoliaJava") {
     javaCompiler = javaToolchains.compilerFor {
         languageVersion = JavaLanguageVersion.of(paperTargetJavaVersion)
     }
@@ -109,10 +130,12 @@ tasks.named("compilePaperImplementationJava") {
 }
 
 tasks.jar {
-    dependsOn(tasks.named("compilePaperImplementationJava"))
-    from(sourceSets.paperImplementation.output) {
+    dependsOn(tasks.named("compileFoliaJava"))
+    dependsOn(tasks.named("compilePaperJava"))
+    from(sourceSets.folia.output) {
         into("META-INF/versions/${paperTargetJavaVersion}")
     }
+    // No need to include classes from paper because folia has them all already
     manifest {
         attributes("Multi-Release": "true")
     }
@@ -153,11 +176,11 @@ tasks.register("Paper", RunServerTask) {
     acceptMojangEula()
 }
 
-tasks.register("Folia", RunServerTask) {
+tasks.register("Canvas", RunServerTask) {
     group = "minecraft-server-test"
-    description = "Run a Folia server"
+    description = "Run a Canvas server"
 
-    serverType = "FOLIA"
+    serverType = "CANVAS"
     serverVersion("1.21.8")
     noGui(true)
     acceptMojangEula()
