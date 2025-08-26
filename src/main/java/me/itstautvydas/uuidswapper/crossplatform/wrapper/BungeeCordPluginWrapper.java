@@ -2,7 +2,7 @@ package me.itstautvydas.uuidswapper.crossplatform.wrapper;
 
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
-import me.itstautvydas.uuidswapper.crossplatform.JavaLoggerWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.shared.JavaLoggerWrapper;
 import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperBungeeCord;
 import net.md_5.bungee.api.CommandSender;
@@ -10,6 +10,7 @@ import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.plugin.Command;
 import net.md_5.bungee.api.scheduler.ScheduledTask;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -22,8 +23,8 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
     }
 
     @Override
-    public void registerCommand() {
-        ProxyServer.getInstance().getPluginManager().registerCommand(handle, new Command("uuidswapper-bungee") {
+    public void registerCommand(String commandName) {
+        ProxyServer.getInstance().getPluginManager().registerCommand(handle, new Command(commandName) {
             @Override
             public void execute(CommandSender sender, String[] args) {
 
@@ -37,7 +38,7 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
     }
 
     @Override
-    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         ScheduledTask task;
         if (repeatInSeconds == null)
             task = server.getScheduler().schedule(handle, run, delayInSeconds, TimeUnit.SECONDS);

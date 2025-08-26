@@ -12,6 +12,7 @@ import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperVelocity;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.event.Level;
 
@@ -28,9 +29,9 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
     }
 
     @Override
-    public void registerCommand() {
+    public void registerCommand(String commandName) {
         var commandManager = ((VelocityPluginWrapper)PluginWrapper.getCurrent()).getServer().getCommandManager();
-        var command = BrigadierCommand.literalArgumentBuilder("uuidswapper-velocity")
+        var command = BrigadierCommand.literalArgumentBuilder(commandName)
                 .requires(source -> source.hasPermission(Utils.COMMAND_PERMISSION))
                 .executes(ctx -> {
                     onNoArgsCommand(ctx);
@@ -44,8 +45,8 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
                         }))
                 .build();
 
-        commandManager.register(commandManager.metaBuilder("uuidswapper-velocity")
-                .plugin(this)
+        commandManager.register(commandManager.metaBuilder(commandName)
+                .plugin(handle)
                 .build(), new BrigadierCommand(command));
     }
 
@@ -56,7 +57,7 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
 
     @Override
     public void logInfo(String prefix, String message, Object... args) {
-        logger.info(Utils.toLoggerMessage(prefix, message), args);
+        logger.info(Utils.toLoggerMessage(prefix, message, args));
     }
 
     @Override
@@ -64,7 +65,7 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
         logger.atLevel(Level.WARN)
                 .setMessage(exception == null ? null : exception.getMessage())
                 .setCause(exception)
-                .log(Utils.toLoggerMessage(prefix, message), args);
+                .log(Utils.toLoggerMessage(prefix, message, args));
     }
 
     @Override
@@ -72,11 +73,11 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
         logger.atLevel(Level.ERROR)
                 .setMessage(exception == null ? null : exception.getMessage())
                 .setCause(exception)
-                .log(Utils.toLoggerMessage(prefix, message), args);
+                .log(Utils.toLoggerMessage(prefix, message, args));
     }
 
     @Override
-    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         var builder = server.getScheduler().buildTask(handle, run);
         if (repeatInSeconds != null)
             builder.repeat(repeatInSeconds, TimeUnit.SECONDS);

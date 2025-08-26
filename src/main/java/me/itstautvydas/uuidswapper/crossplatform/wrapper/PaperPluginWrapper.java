@@ -10,7 +10,7 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
-import me.itstautvydas.uuidswapper.crossplatform.JavaLoggerWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.shared.JavaLoggerWrapper;
 import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperPaper;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -18,6 +18,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.UUID;
@@ -52,9 +53,9 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Bukk
     }
 
     @Override
-    public void registerCommand() {
+    public void registerCommand(String commandName) {
         handle.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands -> {
-            commands.registrar().register(Commands.literal("uuidswapper-paper")
+            commands.registrar().register(Commands.literal(commandName)
                             .requires(source -> source.getSender().hasPermission(Utils.COMMAND_PERMISSION))
                             .executes(ctx -> {
                                 onNoArgsCommand(ctx);
@@ -93,7 +94,7 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Bukk
     }
 
     @Override
-    public PluginTaskWrapper<BukkitTask> scheduleTask(Runnable run, Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper<BukkitTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         BukkitTask task;
         if (repeatInSeconds == null)
             task = server.getScheduler().runTaskLater(handle, run, delayInSeconds * 20);
