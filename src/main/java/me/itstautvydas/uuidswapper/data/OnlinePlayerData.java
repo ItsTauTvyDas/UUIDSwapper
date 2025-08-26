@@ -1,26 +1,36 @@
 package me.itstautvydas.uuidswapper.data;
 
 import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
-@SuppressWarnings("ClassCanBeRecord")
-@Getter
+@ToString @Getter @Setter
 public class OnlinePlayerData {
-    private final UUID originalUuid;
-    private final UUID onlineUuid;
-    private final List<ProfileProperty> properties;
-    private final String address;
+    private final UUID originalUniqueId;
+    private UUID onlineUniqueId;
+    private List<ProfileProperty> properties;
+    private String address;
     private final Long createdAt;
-    private final Long updatedAt;
+    private Long updatedAt;
 
-    public OnlinePlayerData(UUID originalUuid, UUID onlineUuid, List<ProfileProperty> properties, String address, Long createdAt, Long updatedAt) {
-        this.originalUuid = originalUuid;
-        this.onlineUuid = onlineUuid;
+    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfileProperty> properties, String address) {
+        this.originalUniqueId = originalUniqueId;
+        this.onlineUniqueId = onlineUniqueId;
         this.properties = properties;
         this.address = address;
-        this.createdAt = createdAt == null ? System.currentTimeMillis() : createdAt;
-        this.updatedAt = updatedAt == null ? System.currentTimeMillis() : updatedAt;
+        this.createdAt = System.currentTimeMillis();
+        this.updatedAt = System.currentTimeMillis();
+    }
+
+    public boolean isOnlineUniqueId() {
+        return !Objects.equals(originalUniqueId, onlineUniqueId);
+    }
+
+    public UUID getOnlineUniqueId() {
+        return onlineUniqueId == null ? originalUniqueId : onlineUniqueId;
     }
 }
