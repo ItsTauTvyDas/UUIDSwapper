@@ -17,7 +17,7 @@ public class CacheDatabaseManager {
     @Getter
     private DriverImplementation driver;
     private long timeCounter;
-    private PluginTaskWrapper<?> timer;
+    private PluginTaskWrapper timer;
 
     private final Map<String, Supplier<DriverImplementation>> registry = new HashMap<>();
 

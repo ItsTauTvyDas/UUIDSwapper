@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungeeCord, ScheduledTask, ProxyServer, CommandSender> {
+public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungeeCord, ProxyServer, CommandSender> {
     @Override
     public void sendMessage(CommandSender sender, Function<Configuration.CommandMessagesConfiguration, String> message, Map<String, Object> placeholders) {
         sender.sendMessage(TextComponent.fromLegacy(Utils.replacePlaceholders(message.apply(getConfiguration().getCommandMessages()), placeholders)));
@@ -38,16 +38,16 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
     }
 
     @Override
-    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         ScheduledTask task;
         if (repeatInSeconds == null)
             task = server.getScheduler().schedule(handle, run, delayInSeconds, TimeUnit.SECONDS);
         else
             task = server.getScheduler().schedule(handle, run, delayInSeconds, repeatInSeconds, TimeUnit.SECONDS);
-        return new PluginTaskWrapper<>(task) {
+        return new PluginTaskWrapper(task) {
             @Override
             public void cancel() {
-                handle.cancel();
+                ((ScheduledTask)handle).cancel();
             }
         };
     }

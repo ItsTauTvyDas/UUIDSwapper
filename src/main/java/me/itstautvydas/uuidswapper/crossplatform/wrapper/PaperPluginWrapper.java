@@ -25,7 +25,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 @SuppressWarnings("unused")
-public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, BukkitTask, Server, CommandContext<CommandSourceStack>> {
+public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Server, CommandContext<CommandSourceStack>> {
     @Override
     public void sendMessage(CommandContext<CommandSourceStack> ctx, Function<Configuration.CommandMessagesConfiguration, String> message, Map<String, Object> placeholders) {
         ctx.getSource().getSender().sendMessage(LegacyComponentSerializer
@@ -94,17 +94,17 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Bukk
     }
 
     @Override
-    public PluginTaskWrapper<BukkitTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         BukkitTask task;
         if (repeatInSeconds == null)
             task = server.getScheduler().runTaskLater(handle, run, delayInSeconds * 20);
         else
             task = server.getScheduler().runTaskTimer(handle, run, delayInSeconds * 20, repeatInSeconds * 20);
 
-        return new PluginTaskWrapper<>(task) {
+        return new PluginTaskWrapper(task) {
             @Override
             public void cancel() {
-                handle.cancel();
+                ((BukkitTask)handle).cancel();
             }
         };
     }

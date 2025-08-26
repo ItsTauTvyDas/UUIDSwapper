@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, ScheduledTask, Logger, ProxyServer, CommandContext<CommandSource>> {
+public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Logger, ProxyServer, CommandContext<CommandSource>> {
     @Override
     public void sendMessage(CommandContext<CommandSource> sender, Function<Configuration.CommandMessagesConfiguration, String> message, Map<String, Object> placeholders) {
         sender.getSource().sendMessage(LegacyComponentSerializer
@@ -77,15 +77,15 @@ public class VelocityPluginWrapper extends PluginWrapper<UUIDSwapperVelocity, Sc
     }
 
     @Override
-    public PluginTaskWrapper<ScheduledTask> scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
+    public PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
         var builder = server.getScheduler().buildTask(handle, run);
         if (repeatInSeconds != null)
             builder.repeat(repeatInSeconds, TimeUnit.SECONDS);
         builder.delay(delayInSeconds, TimeUnit.SECONDS);
-        return new PluginTaskWrapper<>(builder.schedule()) {
+        return new PluginTaskWrapper(builder.schedule()) {
             @Override
             public void cancel() {
-                handle.cancel();
+                ((ScheduledTask)handle).cancel();
             }
         };
     }
