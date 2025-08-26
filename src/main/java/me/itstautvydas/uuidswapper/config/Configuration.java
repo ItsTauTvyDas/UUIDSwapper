@@ -1,8 +1,8 @@
 package me.itstautvydas.uuidswapper.config;
 
 import com.google.gson.annotations.SerializedName;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 import me.itstautvydas.uuidswapper.enums.ConditionsMode;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
@@ -11,9 +11,18 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-@Data
+@SuppressWarnings({"FieldMayBeFinal", "unused"})
+@ToString
+@Getter
 public class Configuration {
-    @Data
+    @ToString
+    @Getter
+    public static class PaperConfiguration {
+        private boolean useMiniMessages;
+    }
+
+    @ToString
+    @Getter
     public static class DatabaseConfiguration {
         @RequiredProperty
         private boolean enabled;
@@ -32,23 +41,24 @@ public class Configuration {
         private boolean debugEnabled = false;
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class CachingConfiguration {
         @RequiredProperty
         private boolean enabled;
         private long keepTime = 7200;
-        private boolean useCreatedAt = true;
-        private boolean useUpdatedAt = true;
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class UsernameChangesConfiguration {
         private boolean checkDependingOnIpAddress = false;
-        private boolean noRequestsWithExistingUsername = true;
+        private boolean checkPlayerCache = true;
     }
 
-    @SuppressWarnings("ConstantValue")
-    @Data
+
+    @ToString
+    @Getter
     public static class ResponseHandlerConfiguration {
         @RequiredProperty
         private long order = 9999;
@@ -94,44 +104,91 @@ public class Configuration {
                         result = result || conditionResult;
                 }
             }
-            return result != null && result;
+            return result;
         }
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class DefaultServiceConfiguration {
-        private String requestMethod = "GET";
-        private String badUuidDisconnectMessage;
-        private String defaultDisconnectMessage;
-        private String connectionErrorDisconnectMessage;
-        private String serviceBadStatusDisconnectMessage;
-        private String unknownErrorDisconnectMessage;
-        private String serviceTimeoutDisconnectMessage;
-        private int expectStatusCode = 200;
-        private long timeout = 3000;
-        private boolean allowCaching = true;
-        private boolean ignoreStatusCode = false;
+        protected String requestMethod;
+        protected String badUuidDisconnectMessage;
+        protected String defaultDisconnectMessage;
+        protected String connectionErrorDisconnectMessage;
+        protected String serviceBadStatusDisconnectMessage;
+        protected String unknownErrorDisconnectMessage;
+        protected String serviceTimeoutDisconnectMessage;
+        protected Integer expectStatusCode;
+        protected Long timeout;
+        protected Boolean allowCaching;
+        protected Boolean ignoreStatusCode;
         @SerializedName("debug")
-        private boolean debugEnabled = false;
-        @RequiredProperty
-        private List<FallbackUsage> useFallbacks = new ArrayList<>();
-        private Map<String, String> postData = new HashMap<>();
-        private Map<String, String> queryData = new HashMap<>();
-        private Map<String, String> headers = new HashMap<>();
+        protected Boolean debugEnabled;
+        protected LinkedHashSet<FallbackUsage> useFallbacks;
+        protected Map<String, String> postData;
+        protected Map<String, String> queryData;
+        protected Map<String, String> headers;
+
+        public int getExpectStatusCode() {
+            return expectStatusCode;
+        }
+
+        public long getTimeout() {
+            return timeout;
+        }
+
+        public boolean isDebugEnabled() {
+            return Boolean.TRUE.equals(debugEnabled);
+        }
+
+        public boolean isAllowCaching() {
+            return Boolean.TRUE.equals(allowCaching);
+        }
+
+        public boolean isIgnoreStatusCode() {
+            return Boolean.TRUE.equals(ignoreStatusCode);
+        }
     }
 
-    @EqualsAndHashCode(callSuper = true)
-    @Data
+    @ToString(callSuper = true)
+    @Getter
     public static class ServiceConfiguration extends DefaultServiceConfiguration {
         @RequiredProperty
         private String name;
         @RequiredProperty
         private String endpoint;
-        @RequiredProperty
         private String jsonPathToUuid;
         private String jsonPathToProperties;
-        private String jsonPathToTextures;
+        private LinkedHashSet<String> requestServicesForProperties = new LinkedHashSet<>();
         private List<ResponseHandlerConfiguration> responseHandlers = new ArrayList<>();
+
+        public void setDefaults(DefaultServiceConfiguration service) {
+            this.requestMethod = defaultValue(requestMethod, service.getRequestMethod(), "GET");
+            this.badUuidDisconnectMessage = defaultValue(badUuidDisconnectMessage, service.getBadUuidDisconnectMessage(), null);
+            this.defaultDisconnectMessage = defaultValue(defaultDisconnectMessage, service.getDefaultDisconnectMessage(), null);
+            this.connectionErrorDisconnectMessage = defaultValue(connectionErrorDisconnectMessage, service.getConnectionErrorDisconnectMessage(), null);
+            this.serviceBadStatusDisconnectMessage = defaultValue(serviceBadStatusDisconnectMessage, service.getServiceBadStatusDisconnectMessage(), null);
+            this.unknownErrorDisconnectMessage = defaultValue(unknownErrorDisconnectMessage, service.getUnknownErrorDisconnectMessage(), null);
+            this.serviceTimeoutDisconnectMessage = defaultValue(serviceTimeoutDisconnectMessage, service.getServiceTimeoutDisconnectMessage(), null);
+            this.expectStatusCode = defaultValue(expectStatusCode, service.expectStatusCode, 200);
+            this.timeout = defaultValue(timeout, service.timeout, 3000L);
+            this.allowCaching = defaultValue(allowCaching, service.allowCaching, true);
+            this.ignoreStatusCode = defaultValue(ignoreStatusCode, service.ignoreStatusCode, false);
+            this.debugEnabled = defaultValue(debugEnabled, service.debugEnabled, false);
+            this.useFallbacks = defaultValue(useFallbacks, service.getUseFallbacks(), new LinkedHashSet<>());
+            this.postData = defaultValue(postData, service.getPostData(), new HashMap<>());
+            this.queryData = defaultValue(queryData, service.getQueryData(), new HashMap<>());
+            this.headers = defaultValue(headers, service.getHeaders(), new HashMap<>());
+        }
+
+        private <T> T defaultValue(T current, T defaultValue, T defaultValueIfFail) {
+            if (current == null) {
+                if (defaultValue == null)
+                    return defaultValueIfFail;
+                return defaultValue;
+            }
+            return current;
+        }
 
         public void sortResponseHandlers() {
             responseHandlers.sort(Comparator.comparingLong(ResponseHandlerConfiguration::getOrder));
@@ -144,9 +201,22 @@ public class Configuration {
             }
             return null;
         }
+
+        public boolean isForProperties() {
+            return jsonPathToUuid == null && canRetrieveProperties();
+        }
+
+        public boolean isForUniqueId() {
+            return jsonPathToUuid != null;
+        }
+
+        public boolean canRetrieveProperties() {
+            return jsonPathToProperties != null;
+        }
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class OnlineAuthenticationConfiguration {
         @RequiredProperty
         private boolean enabled;
@@ -154,7 +224,7 @@ public class Configuration {
         @SerializedName("use-service")
         private String serviceName;
         @RequiredProperty
-        private List<String> fallbackServices;
+        private LinkedHashSet<String> fallbackServices;
         private long fallbackServiceRememberTime = 21600;
         private long maxTimeout = 6000;
         private long minTimeout = 1000;
@@ -170,42 +240,59 @@ public class Configuration {
         private UsernameChangesConfiguration usernameChanges;
         @RequiredProperty
         private DefaultServiceConfiguration serviceDefaults;
-        private List<ServiceConfiguration> services = new ArrayList<>();
+        @RequiredProperty
+        private List<ServiceConfiguration> services;
 
         public ServiceConfiguration getService(String name) {
             return services.stream()
-                    .filter(s -> s.getName().equals(name))
+                    .filter(s -> Objects.equals(s.getName(), name))
                     .findFirst()
                     .orElse(null);
         }
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class RandomizerConfiguration {
-        @Data
-        public static class UuidRandomizer {
+        @Getter
+        public static class UniqueIdRandomizer {
             @RequiredProperty
             private boolean randomize;
             @RequiredProperty
             private boolean save;
         }
 
-        @EqualsAndHashCode(callSuper = true)
-        @Data
-        public static class UsernameRandomizer extends UuidRandomizer {
+        @ToString(callSuper = true)
+        @Getter
+        public static class UsernameRandomizer extends UniqueIdRandomizer {
+            @RequiredProperty
+            private String outOfUsernamesDisconnectMessage;
             @RequiredProperty
             private String characters;
+            @RequiredProperty
+            private int fromLength;
+            @RequiredProperty
+            private int toLength;
         }
 
         @RequiredProperty
         private boolean enabled;
-        @SerializedName("username") @RequiredProperty
+        @RequiredProperty
+        private boolean useProperties;
+        @RequiredProperty
+        private boolean fetchPropertiesFromServices;
+        @RequiredProperty @SerializedName("username")
         private UsernameRandomizer usernameSettings;
-        @SerializedName("uuid") @RequiredProperty
-        private UuidRandomizer uuidSettings;
+        @RequiredProperty @SerializedName("unique-id")
+        private UniqueIdRandomizer uniqueIdSettings;
+
+        public boolean isFetchPropertiesFromServices() {
+            return fetchPropertiesFromServices && useProperties;
+        }
     }
 
-    @Data
+    @ToString
+    @Getter
     public static class CommandMessagesConfiguration {
         @RequiredProperty
         private String prefix;
@@ -227,6 +314,21 @@ public class Configuration {
         private String debugHeader;
     }
 
+    @ToString
+    @Getter
+    public static class SwappedUniqueIdsConfiguration {
+        @RequiredProperty
+        private boolean enabled;
+        @RequiredProperty
+        private Map<String, String> map;
+    }
+
+    @ToString(callSuper = true)
+    public static class SwappedPlayerNamesConfiguration extends SwappedUniqueIdsConfiguration {
+    }
+
+    @RequiredProperty
+    private PaperConfiguration paper;
     @RequiredProperty
     private DatabaseConfiguration database;
     @RequiredProperty
@@ -234,9 +336,9 @@ public class Configuration {
     @RequiredProperty
     private RandomizerConfiguration playerRandomizer;
     @RequiredProperty
-    private Map<String, String> customPlayerNames;
+    private SwappedUniqueIdsConfiguration swappedUniqueIds;
     @RequiredProperty
-    private Map<String, String> swappedUuids;
+    private SwappedPlayerNamesConfiguration swappedPlayerNames;
     @RequiredProperty
     private CommandMessagesConfiguration commandMessages;
 }

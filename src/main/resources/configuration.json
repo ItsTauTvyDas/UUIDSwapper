@@ -1,4 +1,7 @@
 {
+  "paper": {
+    "use-mini-messages": false
+  },
   "database": {
     "enabled": false,
     "download-driver": true,
@@ -13,7 +16,7 @@
     "enabled": false,
     "use-service": "PlayerDB",
     "fallback-services": [
-      "MinecraftServices"
+      "MojangAPI"
     ],
     "fallback-service-remember-time": 21600,
     "max-timeout": 6000,
@@ -22,16 +25,14 @@
     "send-messages-to-console": true,
     "send-error-messages-to-console": true,
     "service-connection-throttle": 5000,
-    "service-connection-throttled-message": "UUID service connection throttles, wait {time-left} seconds until you can connect again!",
+    "service-connection-throttled-message": "UUID service connection throttled, wait {time-left} seconds until you can connect again!",
     "caching": {
       "enabled": true,
-      "keep-time": 7200,
-      "use-created-at": true,
-      "use-updated-at": true
+      "keep-time": 7200
     },
     "username-changes": {
       "check-depending-on-ip-address": false,
-      "check-username-cache": true
+      "check-player-cache": true
     },
     "service-defaults": {
       "expect-status-code": 200,
@@ -42,6 +43,7 @@
       "unknown-error-disconnect-message": "&cFailed to get your online UUID (unknown error), contact server's administrator!",
       "service-timeout-disconnect-message": "&cFailed to get your online UUID (service timed out), try again later!",
       "timeout": 3000,
+      "debug": false,
       "allow-caching": true,
       "use-fallbacks": [
         "ON_CONNECTION_ERROR",
@@ -72,10 +74,11 @@
         ]
       },
       {
-        "name": "MinecraftServices",
-        "endpoint": "https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}",
+        "name": "MojangAPI",
+        "endpoint": "https://api.mojang.com/users/profiles/minecraft/{username}",
         "json-path-to-uuid": "id",
         "ignore-status-code": true,
+        "request-services-for-properties": ["MojangAPI-properties"],
         "response-handlers": [
           {
             "state": "AFTER_UUID",
@@ -85,28 +88,47 @@
             }
           }
         ]
+      },
+      {
+        "name": "MojangAPI-properties",
+        "endpoint": "https://sessionserver.mojang.com/session/minecraft/profile/{response.id}",
+        "query-data": {
+          "unsigned": false
+        },
+        "json-path-to-properties": "properties"
       }
     ]
   },
   "player-randomizer": {
     "enabled": false,
+    "use-properties": true,
+    "fetch-properties-from-services": true,
     "username": {
       "randomize": true,
+      "out-of-usernames-disconnect-message": "&cWe seem to hit the limit of random available usernames!",
       "save": false,
+      "from-length": 3,
+      "to-length": 16,
       "characters": "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM123456789_"
     },
-    "uuid": {
+    "unique-id": {
       "randomize": true,
       "save": false
     }
   },
-  "swapped-uuids": {
-    "u:Notch": "00000000-0000-0000-0000-000000000000",
-    "00000000-0000-0000-0000-000000000000": "00000000-0000-0000-0000-000000000001"
+  "swapped-unique-ids": {
+    "enabled": false,
+    "map": {
+      "u:Notch": "00000000-0000-0000-0000-000000000000",
+      "00000000-0000-0000-0000-000000000000": "00000000-0000-0000-0000-000000000001"
+    }
   },
-  "custom-player-names": {
-    "u:Notch": "Herobrine",
-    "00000000-0000-0000-0000-000000000000": "jeb_"
+  "swapped-player-names": {
+    "enabled": false,
+    "map": {
+      "u:Notch": "Herobrine",
+      "00000000-0000-0000-0000-000000000000": "jeb_"
+    }
   },
   "command-messages": {
     "prefix": "&b[UUIDSwapper] &r",
