@@ -15,14 +15,14 @@ A velocity plugin for swapping player UUIDs or usernames.
 - [x] Multiple API services for getting online UUID
 - [ ] Online UUID caching (**SQLite**/**Memory**/~~JSON~~) **(almost done)**
   - [x] Automatically download database drivers
-- [ ] Cross-platform support (BungeeCord, Velocity, ~~Folia~~, ~~Paper~~, ~~Spigot~~)
-- Skins (might not be possible)
-  - [ ] Use online skins (???)
+- [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~)
+- Skins
+  - [x] Use online skins
   - [ ] Swap skins
   - [ ] Set default skin (custom skin pack?)
-- [ ] Randomize usernames/UUIDs **(almost done)**
+- [x] Randomize usernames/UUIDs **(almost done)**
 - [ ] Toggle capes/skins
-- [ ] Command for changing username or UUID
+- [x] Command for changing username or UUID
 
 ## Default configuration:
 Configuration is TOML based and resides in `/plugins/uuid-swapper/config.toml`
