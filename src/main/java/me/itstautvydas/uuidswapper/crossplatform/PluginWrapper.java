@@ -1,6 +1,9 @@
 package me.itstautvydas.uuidswapper.crossplatform;
 
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import com.google.gson.internal.LinkedTreeMap;
 import lombok.Getter;
 import me.itstautvydas.BuildConstants;
@@ -17,16 +20,19 @@ import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
 import me.itstautvydas.uuidswapper.helper.SimplifiedLogger;
+import me.itstautvydas.uuidswapper.json.InvalidFieldsCollectorAdapterFactory;
 import me.itstautvydas.uuidswapper.json.RequiredPropertyAdapterFactory;
 import me.itstautvydas.uuidswapper.json.SortedJsonSerializer;
 import me.itstautvydas.uuidswapper.json.StringListToStringAdapter;
-import me.itstautvydas.uuidswapper.json.InvalidFieldsCollectorAdapterFactory;
 import me.itstautvydas.uuidswapper.randomizer.PlayerRandomizer;
 import me.itstautvydas.uuidswapper.service.PlayerDataFetcher;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.*;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;

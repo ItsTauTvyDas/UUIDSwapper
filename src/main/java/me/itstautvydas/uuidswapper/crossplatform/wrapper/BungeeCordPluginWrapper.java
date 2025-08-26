@@ -2,8 +2,8 @@ package me.itstautvydas.uuidswapper.crossplatform.wrapper;
 
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
-import me.itstautvydas.uuidswapper.crossplatform.shared.JavaLoggerWrapper;
 import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
+import me.itstautvydas.uuidswapper.crossplatform.shared.JavaLoggerWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperBungeeCord;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.ProxyServer;

@@ -4,7 +4,10 @@ import lombok.RequiredArgsConstructor;
 import me.itstautvydas.uuidswapper.config.Configuration;
 
 import java.math.BigInteger;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 
 @RequiredArgsConstructor
 public class PlayerRandomizer {
