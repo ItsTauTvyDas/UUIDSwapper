@@ -9,6 +9,7 @@ import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.chat.TranslatableComponent;
 import net.md_5.bungee.api.connection.PendingConnection;
 import net.md_5.bungee.api.event.LoginEvent;
+import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
@@ -32,11 +33,17 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
     }
 
     @EventHandler
-    public void onPlayerPreLoginEvent(LoginEvent event) {
+    public void handlePlayerDisconnect(PlayerDisconnectEvent event) {
+        PluginWrapper.getCurrent().onPlayerDisconnect(event.getPlayer().getName(), event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void handlePlayerPreLogin(LoginEvent event) {
         final var inetAddress = (InetSocketAddress) event.getConnection().getSocketAddress();
         var completableFuture = PluginWrapper.getCurrent().onPlayerLogin(
                 event.getConnection().getName(),
                 event.getConnection().getUniqueId(),
+                null,
                 inetAddress.getAddress().getHostAddress(),
                 true, null,
 //                    () -> event.getConnection().setOnlineMode(false),
@@ -52,21 +59,18 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
                 }
         );
 
-        if (completableFuture != null) {
-            event.registerIntent(this);
-            ProxyServer.getInstance().getScheduler().runAsync(this, completableFuture::join);
-            changeGameProfile(event.getConnection());
-            event.completeIntent(this);
-        } else {
-            changeGameProfile(event.getConnection());
-        }
+        event.registerIntent(this);
+        ProxyServer.getInstance().getScheduler().runAsync(this, completableFuture::join);
+        changeGameProfile(event.getConnection());
+        event.completeIntent(this);
     }
 
     private void changeGameProfile(PendingConnection connection) {
         var holder = new BiObjectHolder<>(connection.getName(), connection.getUniqueId());
         var properties = new ArrayList<ProfileProperty>();
-        PluginWrapper.getCurrent().onGameProfileRequest(holder, properties);
-        updatePlayer(connection, holder.getFirst(), holder.getSecond(), properties);
+        if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
+            updatePlayer(connection, holder.getFirst(), holder.getSecond(), properties);
+        }
     }
 
     private static Field nameField;

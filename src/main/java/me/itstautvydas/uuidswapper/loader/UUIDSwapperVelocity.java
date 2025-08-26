@@ -1,11 +1,12 @@
 package me.itstautvydas.uuidswapper.loader;
 
 import com.google.inject.Inject;
-import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
@@ -13,12 +14,13 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.GameProfile;
 import me.itstautvydas.BuildConstants;
-import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.ProfileProperty;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -37,20 +39,26 @@ public class UUIDSwapperVelocity {
     }
 
     @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
+    public void handleProxyInitialization(ProxyInitializeEvent event) {
         PluginWrapper.getCurrent().onEnable();
     }
 
     @Subscribe
-    public EventTask onShutdownEvent(ProxyShutdownEvent event) {
+    public EventTask handleProxyShutdown(ProxyShutdownEvent event) {
         return EventTask.async(PluginWrapper.getCurrent()::onDisable);
     }
 
     @Subscribe
-    public void onPlayerPreLogin(PreLoginEvent event, Continuation continuation) {
-        PluginWrapper.getCurrent().onPlayerLogin(
+    public void handlePlayerDisconnect(DisconnectEvent event) {
+        PluginWrapper.getCurrent().onPlayerDisconnect(event.getPlayer().getUsername(), event.getPlayer().getUniqueId());
+    }
+
+    @Subscribe
+    public EventTask handlePlayerPreLogin(PreLoginEvent event) {
+        return EventTask.async(() -> PluginWrapper.getCurrent().onPlayerLogin(
                 event.getUsername(),
                 event.getUniqueId(),
+                null,
                 event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
                 true,
                 () -> event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode()),
@@ -60,26 +68,29 @@ public class UUIDSwapperVelocity {
                             event.setResult(PreLoginEvent.PreLoginComponentResult
                                     .denied(Component.translatable(message.getMessage())));
                         } else {
-                            event.setResult(PreLoginEvent.PreLoginComponentResult
-                                    .denied(Utils.toComponent(message.getMessage())));
+                            if (PluginWrapper.getCurrent().getConfiguration().getPaper().isUseMiniMessages())
+                                event.setResult(PreLoginEvent.PreLoginComponentResult
+                                        .denied(MiniMessage.miniMessage().deserialize(message.getMessage())));
+                            else
+                                event.setResult(PreLoginEvent.PreLoginComponentResult
+                                        .denied(LegacyComponentSerializer.legacy('&').deserialize(message.getMessage())));
                         }
                     }
                 }
-        );
-        continuation.resume();
+        ).join());
     }
 
     @Subscribe
-    public void onGameProfileRequest(GameProfileRequestEvent event) {
+    public void handleGameProfileRequest(GameProfileRequestEvent event) {
         var holder = new BiObjectHolder<>(event.getUsername(), event.getGameProfile().getId());
         var properties = new ArrayList<ProfileProperty>();
-        PluginWrapper.getCurrent().onGameProfileRequest(holder, properties);
-        event.setGameProfile(new GameProfile(
-                holder.getSecond(),
-                holder.getFirst(),
-                properties.isEmpty() ? event.getGameProfile().getProperties() : properties.stream()
-                        .map(x -> new GameProfile.Property(x.getName(), x.getValue(), x.getSignature()))
-                        .toList()
-        ));
+        if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
+            event.setGameProfile(new GameProfile(
+                    holder.getSecond(),
+                    holder.getFirst(),
+                    properties.isEmpty() ? event.getGameProfile().getProperties() : properties.stream()
+                            .map(x -> new GameProfile.Property(x.getName(), x.getValue(), x.getSignature()))
+                            .toList()));
+        }
     }
 }
