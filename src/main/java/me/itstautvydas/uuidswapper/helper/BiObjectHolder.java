@@ -1,7 +1,10 @@
 package me.itstautvydas.uuidswapper.helper;
 
+import lombok.ToString;
+
 import java.util.function.BiConsumer;
 
+@ToString
 public class BiObjectHolder<T, D> {
     private T object;
     private D object2;

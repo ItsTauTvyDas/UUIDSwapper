@@ -1,7 +1,10 @@
 package me.itstautvydas.uuidswapper.helper;
 
+import lombok.ToString;
+
 import java.util.function.Consumer;
 
+@ToString
 public class ObjectHolder<T> {
     private T object;
     private Consumer<T> consumer;

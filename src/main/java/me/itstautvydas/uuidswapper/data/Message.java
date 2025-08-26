@@ -1,16 +1,24 @@
 package me.itstautvydas.uuidswapper.data;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.ToString;
+import me.itstautvydas.uuidswapper.Utils;
 
-@SuppressWarnings("ClassCanBeRecord")
-@RequiredArgsConstructor
-@Getter
+import java.util.Map;
+
+@AllArgsConstructor
+@Getter @ToString
 public class Message {
-    private final String message;
+    private String message;
     private final boolean translatable;
 
     public boolean hasMessage() {
         return message != null;
+    }
+
+    public Message replacePlaceholders(Map<String, Object> placeholders) {
+        this.message = Utils.replacePlaceholders(message, placeholders);
+        return this;
     }
 }
