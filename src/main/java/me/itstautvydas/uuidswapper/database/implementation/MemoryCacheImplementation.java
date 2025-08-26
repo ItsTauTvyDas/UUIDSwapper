@@ -17,7 +17,8 @@ public class MemoryCacheImplementation extends DriverImplementation {
     }
 
     @Override
-    public void clearConnection() {
+    public boolean clearConnection() {
+        return true;
     }
 
     @Override
@@ -26,7 +27,7 @@ public class MemoryCacheImplementation extends DriverImplementation {
     }
 
     @Override
-    public void createOnlineUuidCacheTable(boolean useCreatedAt, boolean useUpdatedAt) {
+    public void createOnlineUuidCacheTable() {
     }
 
     @Override
@@ -49,7 +50,7 @@ public class MemoryCacheImplementation extends DriverImplementation {
     @Override
     public OnlinePlayerData getOnlinePlayerCache(UUID uuid) {
         return onlineOnlinePlayerData.stream()
-                .filter(player -> player.getOriginalUuid().equals(uuid))
+                .filter(player -> player.getOriginalUniqueId().equals(uuid))
                 .findFirst()
                 .orElse(null);
     }
