@@ -43,7 +43,7 @@ public abstract class DriverImplementation {
         if (!Files.exists(driverPath)) {
             if (!getConfiguration().isDownloadDriver()) {
                 PluginWrapper.getCurrent().logError(prefix,
-                        "Driver's file doesn't exist (/drivers/{}) and download function is disabled!",
+                        "Driver's file doesn't exist (/drivers/%s) and download function is disabled!",
                         null, driverPath.getFileName());
                 return false;
             }
@@ -56,16 +56,16 @@ public abstract class DriverImplementation {
                         null, driverPath.getFileName());
                 return false;
             }
-            PluginWrapper.getCurrent().logInfo(prefix, "Downloading {}...", driverPath.getFileName());
+            PluginWrapper.getCurrent().logInfo(prefix, "Downloading %s...", driverPath.getFileName());
             try (var in = new URL(url).openStream()) {
                 Files.copy(in, driverPath, StandardCopyOption.REPLACE_EXISTING);
-                PluginWrapper.getCurrent().logInfo(prefix, "Driver successfully downloaded! Saved as /drivers/{}", driverPath.getFileName());
+                PluginWrapper.getCurrent().logInfo(prefix, "Driver successfully downloaded! Saved as /drivers/%s", driverPath.getFileName());
             } catch (Exception ex) {
-                PluginWrapper.getCurrent().logError(prefix, "Failed to download driver from {}!", ex, url);
+                PluginWrapper.getCurrent().logError(prefix, "Failed to download driver from %s!", ex, url);
                 return false;
             }
         } else {
-            PluginWrapper.getCurrent().logInfo(prefix, "Driver was found, loading {}", driverPath.getFileName());
+            PluginWrapper.getCurrent().logInfo(prefix, "Driver was found, loading %s", driverPath.getFileName());
         }
         // Load class
         String classToLoad = getClassToLoad();
@@ -78,18 +78,19 @@ public abstract class DriverImplementation {
             if (classToLoad != null) {
                 var driverClass = Class.forName(classToLoad, true, loader);
                 onJarFileLoad(loader, driverClass);
-                PluginWrapper.getCurrent().logInfo(prefix, "{} class loaded", classToLoad);
+                PluginWrapper.getCurrent().logInfo(prefix, "%s class loaded", classToLoad);
                 return true;
             }
             onJarFileLoad(loader, null);
             return true;
         } catch (Exception ex) {
-            PluginWrapper.getCurrent().logError(prefix, "Failed to load {}!", ex, driverPath);
+            PluginWrapper.getCurrent().logError(prefix, "Failed to load %s!", ex, driverPath);
             return false;
         }
     }
 
     public final boolean shouldCreateNewConnection(Object connection) {
+        debug("Trying to open new connection");
         if (getManager().shouldConnectionBeCached())
             getManager().resetCounter();
         return connection == null;
@@ -98,7 +99,7 @@ public abstract class DriverImplementation {
     public void debug(String message, Object ...args) {
         if (!getConfiguration().isDebugEnabled())
             return;
-        PluginWrapper.getCurrent().logInfo(prefix, "DEBUG - " + message, args);
+        PluginWrapper.getCurrent().logInfo(prefix, "[DEBUG]" + message, args);
     }
 
     public Configuration.DatabaseConfiguration getConfiguration() {
@@ -118,10 +119,10 @@ public abstract class DriverImplementation {
     }
 
     public abstract void init() throws Exception;
-    public abstract void clearConnection() throws Exception;
+    public abstract boolean clearConnection() throws Exception;
     public abstract boolean isConnectionClosed() throws Exception;
 
-    public abstract void createOnlineUuidCacheTable(boolean useCreatedAt, boolean useUpdatedAt) throws Exception;
+    public abstract void createOnlineUuidCacheTable() throws Exception;
     public abstract void createRandomizedPlayerDataTable() throws Exception;
 
     public abstract void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception;

@@ -48,9 +48,12 @@ public class CacheDatabaseManager {
         if (driver == null)
             return;
         try {
-            driver.clearConnection();
+            driver.debug("Trying to close connection");
+            if (!driver.clearConnection())
+                driver.debug("Connection was not cached");
+            driver.debug("CONNECTION CLOSED");
         } catch (Exception ex) {
-            PluginWrapper.getCurrent().logError("DatabaseManager", "Failed to close {} driver's connection!", ex, driver.getName());
+            PluginWrapper.getCurrent().logError("DatabaseManager", "Failed to close %s driver's connection!", ex, driver.getName());
         }
     }
 
@@ -85,7 +88,7 @@ public class CacheDatabaseManager {
         clean();
         var name = getConfiguration().getDriverName();
         if (setDriverImplementation(name) == null) {
-            PluginWrapper.getCurrent().logError("[DatabaseManager]: Failed to load {} driver!", null, name);
+            PluginWrapper.getCurrent().logError("DatabaseManager", "Failed to load %s driver!", null, name);
             return false;
         }
         return true;
@@ -105,35 +108,37 @@ public class CacheDatabaseManager {
                 return false;
             Objects.requireNonNull(driver);
             driver.init();
+            driver.debug("Connection initialization.");
+            driver.debug("Connection timeout => %s", getConfiguration().getTimeout());
+            driver.debug("Connection always kept => %s", shouldConnectionBeAlwaysKept());
+            driver.debug("Connection cached => %s", shouldConnectionBeCached());
 
             try {
-                var caching = PluginWrapper.getCurrent().getConfiguration().getOnlineAuthentication().getCaching();
-                driver.createOnlineUuidCacheTable(
-                        caching.isUseCreatedAt(),
-                        caching.isUseUpdatedAt()
-                );
+                driver.debug("Trying to create %s table", DriverImplementation.ONLINE_UUID_CACHE_TABLE);
+                driver.createOnlineUuidCacheTable();
             } catch (Exception ex) {
-                PluginWrapper.getCurrent().logError("Failed to create {} table", ex, DriverImplementation.ONLINE_UUID_CACHE_TABLE);
+                PluginWrapper.getCurrent().logError("Failed to create %s table", ex, DriverImplementation.ONLINE_UUID_CACHE_TABLE);
             }
             
             try {
                 driver.createRandomizedPlayerDataTable();
             } catch (Exception ex) {
-                PluginWrapper.getCurrent().logError("Failed to create {} table", ex, DriverImplementation.RANDOM_PLAYER_CACHE_TABLE);
+                PluginWrapper.getCurrent().logError("Failed to create %s table", ex, DriverImplementation.RANDOM_PLAYER_CACHE_TABLE);
             }
         } catch (Exception ex) {
-            PluginWrapper.getCurrent().logError(driver.getPrefix(), "Failed to implement SQLite driver!", ex);
+            PluginWrapper.getCurrent().logError(driver.getPrefix(), "Failed to implement %s driver!", ex, name);
             return false;
         }
         this.driver = driver;
         return true;
     }
 
-    public void storeOnlinePlayerCache(OnlinePlayerData data) {
+    public void storeOnlinePlayerCache(OnlinePlayerData player) {
         try {
-            driver.storeOnlinePlayerCache(data);
+            driver.debug("Trying to store online player (original UUID => %s)", player.getOriginalUniqueId());
+            driver.storeOnlinePlayerCache(player);
         } catch (Exception ex) {
-            PluginWrapper.getCurrent().logInfo(driver.getPrefix(), "Failed to store online player database for {}", ex, data.getOriginalUuid());
+            PluginWrapper.getCurrent().logInfo(driver.getPrefix(), "Failed to store online player database for %s", ex, player.getOriginalUniqueId());
         }
     }
 

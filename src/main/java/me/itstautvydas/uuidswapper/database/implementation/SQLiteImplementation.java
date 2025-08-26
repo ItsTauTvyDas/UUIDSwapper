@@ -16,7 +16,6 @@ public class SQLiteImplementation extends DriverImplementation {
     private Path databaseFilePath;
 
     private Connection newConnection() throws Exception {
-        debug("Trying to open new connection");
         return DriverManager.getConnection("jdbc:sqlite:"
                 + databaseFilePath
                 + "?journal_mode=WAL&busy_timeout="
@@ -88,22 +87,15 @@ public class SQLiteImplementation extends DriverImplementation {
                 .resolve(getConfiguration().getFileName())
                 .toAbsolutePath();
         getConnection(); // Trigger connection creation
-        debug("Connection initialization");
-        debug("Connection timeout => {}", getConfiguration().getTimeout());
-        debug("Connection always kept => {}", getManager().shouldConnectionBeAlwaysKept());
-        debug("Connection cached => {}", getManager().shouldConnectionBeCached());
     }
 
     @Override
-    public void clearConnection() throws Exception {
-        debug("Trying to close connection");
-        if (connection == null) {
-            debug("Connection was not cached");
-            return;
-        }
+    public boolean clearConnection() throws Exception {
+        if (connection == null)
+            return false;
         connection.close();
         connection = null;
-        debug("CONNECTION CLOSED");
+        return true;
     }
 
     @Override
@@ -112,21 +104,15 @@ public class SQLiteImplementation extends DriverImplementation {
     }
 
     @Override
-    public void createOnlineUuidCacheTable(boolean useCreatedAt, boolean useUpdatedAt) throws Exception {
-        var sql = new StringBuilder("CREATE TABLE IF NOT EXISTS " + ONLINE_UUID_CACHE_TABLE + " ("
-                + ONLINE_UUID_CACHE_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
-                + ONLINE_UUID_CACHE_ONLINE_UUID + " TEXT NOT NULL, "
-                + ONLINE_UUID_CACHE_IP_ADDRESS + " TEXT NOT NULL");
-        if (useCreatedAt)
-            sql.append(", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-        if (useUpdatedAt)
-            sql.append(", updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-        sql.append(")");
-
-        debug("Trying to create {} table", ONLINE_UUID_CACHE_TABLE);
+    public void createOnlineUuidCacheTable() throws Exception {
         var connection = getConnection();
         try (var stmt = connection.createStatement()) {
-            stmt.execute(sql.toString());
+            stmt.execute("CREATE TABLE IF NOT EXISTS " + ONLINE_UUID_CACHE_TABLE + " ("
+                    + ONLINE_UUID_CACHE_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
+                    + ONLINE_UUID_CACHE_ONLINE_UUID + " TEXT NOT NULL, "
+                    + ONLINE_UUID_CACHE_IP_ADDRESS + " TEXT NOT NULL, "
+                    + CREATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+                    + UPDATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         }
     }
 
@@ -137,16 +123,14 @@ public class SQLiteImplementation extends DriverImplementation {
 
     @Override
     public void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception {
-        debug("Trying to store online player (original UUID => {})", player.getOriginalUuid());
         var sql = "INSERT OR REPLACE INTO " + ONLINE_UUID_CACHE_TABLE + " (" +
                 ONLINE_UUID_CACHE_ORIGINAL_UUID + ", " +
                 ONLINE_UUID_CACHE_ONLINE_UUID + ", " +
                 ONLINE_UUID_CACHE_IP_ADDRESS +
                 ") VALUES (?, ?, ?)";
-
         try (var connection = getConnection(); var prepare = connection.prepareStatement(sql)) {
-            prepare.setString(1, player.getOriginalUuid().toString());
-            prepare.setString(2, player.getOnlineUuid().toString());
+            prepare.setString(1, player.getOriginalUniqueId().toString());
+            prepare.setString(2, player.getOnlineUniqueId().toString());
             prepare.setString(3, player.getAddress());
             prepare.executeUpdate();
         }
@@ -154,8 +138,6 @@ public class SQLiteImplementation extends DriverImplementation {
 
     @Override
     public OnlinePlayerData getOnlinePlayerCache(String address) throws Exception {
-        debug("Trying to get online player by ip address (address => {})", address);
-
         var sql = "SELECT * FROM " + ONLINE_UUID_CACHE_TABLE + " WHERE " +
                 ONLINE_UUID_CACHE_IP_ADDRESS + " = ? LIMIT 1";
 
