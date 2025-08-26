@@ -334,7 +334,7 @@ public class PlayerDataFetcher {
                 }
 
                 if (responseBody instanceof JsonElement element) {
-                    String path = propertyService.getJsonPathToProperties();
+                    String path = (propertyService == null ? service : propertyService).getJsonPathToProperties();
                     if (path != null) {
                         try {
                             var propertiesJsonElement = Utils.getJsonValue(element, path);

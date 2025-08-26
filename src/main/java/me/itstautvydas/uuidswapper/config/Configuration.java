@@ -244,6 +244,7 @@ public class Configuration {
         private List<ServiceConfiguration> services;
 
         public ServiceConfiguration getService(String name) {
+            if (name == null) return null;
             return services.stream()
                     .filter(s -> Objects.equals(s.getName(), name))
                     .findFirst()
