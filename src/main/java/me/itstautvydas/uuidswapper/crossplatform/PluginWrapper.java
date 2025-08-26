@@ -15,10 +15,13 @@ import me.itstautvydas.uuidswapper.data.ProfileProperty;
 import me.itstautvydas.uuidswapper.database.CacheDatabaseManager;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
+import me.itstautvydas.uuidswapper.helper.ObjectHolder;
 import me.itstautvydas.uuidswapper.helper.SimplifiedLogger;
 import me.itstautvydas.uuidswapper.json.RequiredPropertyAdapterFactory;
 import me.itstautvydas.uuidswapper.json.SortedJsonSerializer;
 import me.itstautvydas.uuidswapper.json.StringListToStringAdapter;
+import me.itstautvydas.uuidswapper.json.InvalidFieldsCollectorAdapterFactory;
+import me.itstautvydas.uuidswapper.randomizer.PlayerRandomizer;
 import me.itstautvydas.uuidswapper.service.PlayerDataFetcher;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -26,19 +29,15 @@ import org.jetbrains.annotations.Nullable;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 @Getter
-public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
-    private static PluginWrapper<?, ?, ?, ?, ?> CURRENT;
+public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
+    private static final String CONFIGURATION_PREFIX = "Configuration";
+    private static PluginWrapper<?, ?, ?, ?> CURRENT;
     private static final Gson GSON = new GsonBuilder()
             .setFieldNamingStrategy(f -> {
                 String fieldName = f.getName();
@@ -54,27 +53,31 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
             })
             .setPrettyPrinting()
             .disableHtmlEscaping()
+            .registerTypeAdapterFactory(new InvalidFieldsCollectorAdapterFactory())
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
             .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
 
-    public static Object createPaperWrapperInstance() throws Exception {
-        var paperLoaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase() + ".crossplatform.wrapper.PaperPluginWrapper");
+    public static Object createPaperWrapperInstance(PlatformType type) throws Exception {
+        var paperLoaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase()
+                + ".crossplatform.wrapper."
+                + type.getName() + "PluginWrapper");
         var constructor = paperLoaderClass.getConstructor();
         return constructor.newInstance();
     }
 
     @SuppressWarnings("unchecked")
-    public static <P, T, L, S, M> void init(PlatformType type, P plugin, S serverObject, L loggerObject, Path dataDirectory) {
+    public static <P, L, S, M> void init(PlatformType type, P plugin, S serverObject, L loggerObject, Path dataDirectory) {
         if (CURRENT != null)
             throw new RuntimeException("Cross-platform implementation is already done!");
-        PluginWrapper<P, T, L, S, M> implementation;
+        PluginWrapper<P, L, S, M> implementation;
+
         try {
             implementation = switch (type) {
-                case VELOCITY -> (PluginWrapper<P, T, L, S, M>) new VelocityPluginWrapper();
-                case BUNGEE -> (PluginWrapper<P, T, L, S, M>) new BungeeCordPluginWrapper();
-                case PAPER -> (PluginWrapper<P, T, L, S, M>) createPaperWrapperInstance();
+                case VELOCITY -> (PluginWrapper<P, L, S, M>) new VelocityPluginWrapper();
+                case BUNGEE -> (PluginWrapper<P, L, S, M>) new BungeeCordPluginWrapper();
+                case PAPER, FOLIA -> (PluginWrapper<P, L, S, M>) createPaperWrapperInstance(type);
             };
         } catch (Exception ex) {
             throw new RuntimeException("Failed to initialize " + type.getName() + "PluginWrapper!", ex);
@@ -85,11 +88,12 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
         implementation.dataDirectory = dataDirectory;
         implementation.handle = plugin;
         CURRENT = implementation;
-        implementation.logInfo("CrossPlatform", "Initiated {} implementation.", type.getName());
+        implementation.logInfo("CrossPlatform", "Initiated %s implementation.", type.getName());
         implementation.onInit();
     }
 
-    public static PluginWrapper<?, ?, ?, ?, ?> getCurrent() {
+    @NotNull
+    public static PluginWrapper<?, ?, ?, ?> getCurrent() {
         return CURRENT;
     }
 
@@ -106,6 +110,8 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
     private Path driversDirectory;
     @Getter
     private CacheDatabaseManager database;
+    @Getter
+    private PlayerRandomizer playerRandomizer;
 
     public final Path getConfigurationPath() {
         return dataDirectory.resolve("configuration.json");
@@ -151,7 +157,6 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
 //        try (InputStream in = getClass().getClassLoader().getResourceAsStream("configuration.json")) {
 //            if (in == null)
 //                throw new FileNotFoundException("configuration.json not found on classpath");
-//            logInfo("Copying configuration file...");
 //            try (var isr = new InputStreamReader(in)) {
 //                configuration = JsonParser.parseReader(isr).getAsJsonObject();
 //            } catch (JsonParseException e) {
@@ -167,7 +172,7 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
             try (InputStream in = getClass().getClassLoader().getResourceAsStream("configuration.json")) {
                 if (in == null)
                     throw new FileNotFoundException("configuration.json not found on classpath");
-                logInfo("Copying configuration file...");
+                logInfo(CONFIGURATION_PREFIX, "Copying configuration file...");
                 Files.copy(in, configurationPath);
             }
         }
@@ -186,7 +191,7 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
         try {
             reloadConfiguration();
         } catch (Exception ex) {
-            logError("Could not initialize configuration!", null);
+            logError(CONFIGURATION_PREFIX, "Could not initialize configuration!", null);
             throw new RuntimeException(ex);
         }
         database = new CacheDatabaseManager();
@@ -195,7 +200,7 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
     public void onEnable() {
         if (database != null)
             database.resetTimer();
-        registerCommand();
+        registerCommand((BuildConstants.NAME + "-" + platformType.getName()).toLowerCase());
     }
 
     public void onDisable() {
@@ -206,8 +211,10 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
     private void log(Map.Entry<String, String> entry) {
         var key = entry.getKey();
         if (key.startsWith("u:"))
-            key = key.substring(2);
-        logInfo(null, "# {} => {}", key, entry.getValue());
+            key = "(Username) " + key.substring(2);
+        else
+            key = "(UUID) " + key;
+        logInfo(CONFIGURATION_PREFIX, "# %s => %s", key, entry.getValue());
     }
 
     public void reloadConfiguration() throws Exception {
@@ -215,115 +222,246 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
         driversDirectory = dataDirectory.resolve("drivers");
         Files.createDirectories(driversDirectory);
 
-//        updateConfiguration();
-//        if (configuration == null)
-            configuration = (Configuration) loadConfiguration(false);
+        InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.put(GSON, new ArrayList<>());
+        configuration = (Configuration) loadConfiguration(false);
+        for (var service : configuration.getOnlineAuthentication().getServices()) {
+            service.sortResponseHandlers();
+            service.setDefaults(configuration.getOnlineAuthentication().getServiceDefaults());
+        }
+        var invalidFields = InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.get(GSON);
+        if (invalidFields != null) {
+            for (var field : invalidFields)
+                logWarning(CONFIGURATION_PREFIX + "/Checker", "Unknown JSON field: " + field, null);
+        }
+        InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.remove(GSON);
 
-        logInfo("Configuration loaded.");
-        logInfo("Using online UUIDs => {}", configuration.getOnlineAuthentication().isEnabled());
+        if (configuration.getPlayerRandomizer().isEnabled() &&
+                (configuration.getPlayerRandomizer().getUniqueIdSettings().isRandomize() ||
+                        configuration.getPlayerRandomizer().getUsernameSettings().isRandomize())) {
+            playerRandomizer = new PlayerRandomizer(configuration.getPlayerRandomizer());
+        } else {
+            playerRandomizer = null;
+        }
 
-        logInfo("Loaded {} swapped UUIDs.", configuration.getSwappedUuids().size());
-        for (var entry : configuration.getSwappedUuids().entrySet())
-            log(entry);
+        logInfo(CONFIGURATION_PREFIX, "Configuration loaded.");
+        logInfo(CONFIGURATION_PREFIX, "Using online UUIDs => %s", configuration.getOnlineAuthentication().isEnabled());
 
-        logInfo("Loaded {} custom player usernames.", configuration.getCustomPlayerNames().size());
-        for (var entry : configuration.getCustomPlayerNames().entrySet())
-            log(entry);
+        if (configuration.getSwappedUniqueIds().isEnabled()) {
+            logInfo(CONFIGURATION_PREFIX, "Loaded %s swapped UUIDs.", configuration.getSwappedUniqueIds().getMap().size());
+            for (var entry : configuration.getSwappedUniqueIds().getMap().entrySet())
+                log(entry);
+        }
+
+        if (configuration.getSwappedPlayerNames().isEnabled()) {
+            logInfo(CONFIGURATION_PREFIX, "Loaded %s custom player usernames.", configuration.getSwappedPlayerNames().getMap().size());
+            for (var entry : configuration.getSwappedPlayerNames().getMap().entrySet())
+                log(entry);
+        }
     }
 
+    public void onPlayerDisconnect(String username, UUID uniqueId) {
+        if (playerRandomizer != null)
+            playerRandomizer.removeGeneratedPlayer(username, uniqueId);
+    }
+
+    @NotNull
     public CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> onPlayerLogin(
             @NotNull String username,
             @Nullable UUID uniqueId,
+            @Nullable List<ProfileProperty> properties,
             @NotNull String address,
             boolean cacheFetchedData,
             @Nullable Runnable switchToOfflineMode,
             @NotNull Consumer<Message> disconnectHandler) {
-        if (!configuration.getOnlineAuthentication().isEnabled())
-            return null;
+        // I don't want to deal with nulls
+        var dummy = CompletableFuture.completedFuture((BiObjectHolder<OnlinePlayerData, Message>)null);
 
-        if (PluginWrapper.getCurrent().isServerOnlineMode()) {
-            if (switchToOfflineMode == null) {
-                disconnectHandler.accept(new Message("multiplayer.disconnect.generic", true));
-                return null;
+        if (playerRandomizer == null) {
+            if (!configuration.getOnlineAuthentication().isEnabled())
+                return dummy;
+
+            if (PluginWrapper.getCurrent().isServerOnlineMode()) {
+                if (switchToOfflineMode == null) {
+                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE, true));
+                    return dummy;
+                }
+                switchToOfflineMode.run();
             }
-            switchToOfflineMode.run();
+        } else {
+            playerRandomizer.removeGeneratedPlayer(uniqueId);
+            if (configuration.getPlayerRandomizer().getUsernameSettings().isRandomize()) {
+                try {
+                    playerRandomizer.nextUsername(uniqueId);
+                } catch (IllegalStateException ex) {
+                    disconnectHandler.accept(new Message(
+                            configuration.getPlayerRandomizer().getUsernameSettings().getOutOfUsernamesDisconnectMessage(),
+                            false
+                    ));
+                    return dummy;
+                } catch (IllegalArgumentException ex) {
+                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE, true));
+                    return dummy;
+                }
+            }
+            if (configuration.getPlayerRandomizer().getUniqueIdSettings().isRandomize())
+                playerRandomizer.nextUniqueId(uniqueId);
         }
 
         if (configuration.getOnlineAuthentication().isCheckForOnlineUuid() && uniqueId != null) {
             var offlineUuid = Utils.generateOfflineUniqueId(username);
             if (!offlineUuid.equals(uniqueId)) {
-                if (configuration.getOnlineAuthentication().isSendMessagesToConsole())
-                    PluginWrapper.getCurrent().logInfo("[PlayerDataFetcher]:", "Player {} has online UUID ({}), skipping fetching.", username, uniqueId);
-                return null;
+                boolean fetchForProperties = false;
+                if (configuration.getOnlineAuthentication().isSendMessagesToConsole()) {
+                    PluginWrapper.getCurrent().logInfo("PlayerDataFetcher", "Player %s connected with premium account, skipping fetching.", username, uniqueId);
+                    if (playerRandomizer != null && configuration.getPlayerRandomizer().isUseProperties()) {
+                        if (properties != null)
+                            PlayerDataFetcher.setPlayerProperties(uniqueId, properties);
+                        else
+                            fetchForProperties = true;
+                    }
+                }
+                if (!fetchForProperties)
+                    return dummy;
             }
         }
 
-        if (PlayerDataFetcher.isThrottled(uniqueId)) {
-            disconnectHandler.accept(new Message(configuration.getOnlineAuthentication().getServiceConnectionThrottledMessage(), false));
-            return null;
+        if (playerRandomizer != null && !configuration.getPlayerRandomizer().isFetchPropertiesFromServices()) {
+            if (configuration.getPlayerRandomizer().isUseProperties() && properties != null)
+                PlayerDataFetcher.setPlayerProperties(uniqueId, properties);
+            return dummy;
+        }
+
+        var timeLeft = new ObjectHolder<Long>(null);
+        if (PlayerDataFetcher.isThrottled(uniqueId, timeLeft)) {
+            disconnectHandler.accept(new Message(configuration.getOnlineAuthentication().getServiceConnectionThrottledMessage(), false)
+                    .replacePlaceholders(Map.of("time-left", timeLeft.get())));
+            return dummy;
         }
 
         return PlayerDataFetcher.getPlayerData(
                 username,
                 uniqueId,
                 address,
-                cacheFetchedData,
-                true,
+                cacheFetchedData && playerRandomizer == null,
+                playerRandomizer == null,
                 false,
                 this
-        ).thenApply(fetchedData -> {
+        ).handle((fetchedData, ex) -> {
+            if (ex != null) {
+                fetchedData = new BiObjectHolder<>(
+                        null,
+                        new Message(configuration.getOnlineAuthentication()
+                                .getServiceDefaults()
+                                .getUnknownErrorDisconnectMessage(),
+                                false));
+                // Won't check for configuration if error messages are enabled, this is NOT a laughing matter.
+                // https://static.itstautvydas.me/funny/this-is-no-laughing-matter.jpg
+                logError("PlayerDataFetcher", "Failed to internally handle services requests!", ex);
+            } else if (fetchedData.containsFirst()) {
+                if (playerRandomizer != null && configuration.getPlayerRandomizer().isFetchPropertiesFromServices() &&
+                        fetchedData.getFirst().getProperties() != null)
+                    PlayerDataFetcher.setPlayerProperties(uniqueId, fetchedData.getFirst().getProperties());
+            }
             if (fetchedData.containsSecond())
                 disconnectHandler.accept(fetchedData.getSecond());
             return fetchedData;
         });
     }
 
-    public void onGameProfileRequest(BiObjectHolder<String, UUID> profile, List<ProfileProperty> properties) {
-        var username = profile.getFirst();
-        var uniqueId = profile.getSecond();
+    public boolean onGameProfileRequest(
+            @NotNull BiObjectHolder<String, UUID> profile,
+            @NotNull List<ProfileProperty> properties
+    ) {
+        boolean changed = false;
+        var pretendData = PlayerDataFetcher.pullPretender(profile.getSecond());
+        if (pretendData != null) {
+            profile.setFirst(pretendData.getUsername());
+            profile.setSecond(pretendData.getUniqueId());
+            properties.addAll(pretendData.getProperties());
+            return true;
+        }
+
+        if (configuration.getPlayerRandomizer().isEnabled() && playerRandomizer != null) {
+            var prefix = "PlayerRandomizer";
+
+            var randomUsername = playerRandomizer.getGeneratedUsername(profile.getSecond());
+            var randomUniqueId = playerRandomizer.getGeneratedUniqueId(profile.getSecond());
+
+            if (randomUsername != null || randomUniqueId != null) {
+                var fetched = PlayerDataFetcher.pullPlayerData(profile.getSecond());
+                logInfo(prefix, "Player's (%s/%s) new random profile is:", profile.getFirst(), profile.getSecond());
+                if (randomUsername != null) {
+                    logInfo(prefix, "  # Random username => %s", randomUsername);
+                    profile.setFirst(randomUsername);
+                }
+
+                if (randomUniqueId != null) {
+                    logInfo(prefix, "  # Random unique ID => %s", randomUniqueId);
+                    profile.setSecond(randomUniqueId);
+                }
+
+                if (fetched != null) {
+                    if (fetched.getProperties() != null) {
+                        properties.addAll(fetched.getProperties());
+                        logInfo(prefix, "  # Successfully applied %s profile properties!", fetched.isOnlineUniqueId() ? "online" : "current");
+                    }
+                }
+            }
+            return true;
+        }
 
         if (configuration.getOnlineAuthentication().isEnabled()) {
-            var fetched = PlayerDataFetcher.pullPlayerData(uniqueId);
+            var fetched = PlayerDataFetcher.pullPlayerData(profile.getSecond());
             if (fetched != null) {
-                profile.setSecond(fetched.getOnlineUuid());
+                profile.setSecond(fetched.getOnlineUniqueId());
                 if (fetched.getProperties() != null)
                     properties.addAll(fetched.getProperties());
-                uniqueId = fetched.getOnlineUuid();
+                changed = true;
             }
         }
 
-        var swappedUsernames = configuration.getCustomPlayerNames();
-        var swappedUuids = configuration.getSwappedUuids();
+        String swappedUsername = null;
+        String swappedUniqueId = null;
 
-        var newUsername = Utils.getSwappedValue(swappedUsernames, username, uniqueId);
-        var newUniqueId = Utils.getSwappedValue(swappedUuids, username, uniqueId);
-
-        var prefix = "Swapper";
-        if (newUsername != null || newUniqueId != null)
-            logInfo(prefix, "Player's ({}/{}) new profile is:", username, uniqueId);
-
-        if (newUsername != null) {
-            profile.setFirst(newUsername);
-            logInfo(prefix, "  # Username => {}", newUsername);
+        if (configuration.getSwappedUniqueIds().isEnabled()) {
+            var swappedUuids = configuration.getSwappedUniqueIds().getMap();
+            swappedUniqueId = Utils.getSwappedValue(swappedUuids, profile.getFirst(), profile.getSecond());
         }
 
-        if (newUniqueId != null) {
-            profile.setSecond(UUID.fromString(newUniqueId));
-            logInfo(prefix, "  # Unique ID => {}", newUniqueId);
+        if (configuration.getSwappedPlayerNames().isEnabled()) {
+            var swappedUsernames = configuration.getSwappedPlayerNames().getMap();
+            swappedUsername = Utils.getSwappedValue(swappedUsernames, profile.getFirst(), profile.getSecond());
         }
+
+        if (swappedUsername != null || swappedUniqueId != null) {
+            var prefix = "PlayerSwapper";
+            logInfo(prefix, "Player's (%s/%s) new profile is:", profile.getFirst(), profile.getSecond());
+            changed = true;
+            if (swappedUsername != null) {
+                profile.setFirst(swappedUsername);
+                logInfo(prefix, "  # Username => %s", swappedUsername);
+            }
+            if (swappedUniqueId != null) {
+                profile.setSecond(Utils.toUniqueId(swappedUniqueId));
+                logInfo(prefix, "  # Unique ID => %s", swappedUniqueId);
+            }
+        }
+
+        return changed;
     }
 
-    private Map<String, Object> placeholders() {
+    private Map<String, Object> getCommandBasePlaceholders() {
         var map = new HashMap<String, Object>();
         map.put("command", "uuidswapper-" + platformType.getName().toLowerCase());
         map.put("prefix", configuration.getCommandMessages().getPrefix());
         return map;
     }
 
-    public SimplifiedLogger createLogger(M messageAcceptor) {
+    public static <M> SimplifiedLogger createLogger(M messageAcceptor) {
         return new SimplifiedLogger() {
+            @SuppressWarnings("unchecked")
             void sendMessage(String message, Object... args) {
-                PluginWrapper.this.sendMessage(
+                ((PluginWrapper<?, ?, ?, M>) PluginWrapper.getCurrent()).sendMessage(
                         messageAcceptor,
                         x -> message.formatted(args),
                         null
@@ -332,29 +470,29 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
 
             @Override
             public void logInfo(String prefix, String message, Object... args) {
-                sendMessage(Utils.toLoggerMessage(prefix, message), args);
+                sendMessage(Utils.toLoggerMessage(prefix, message, args));
             }
 
             @Override
             public void logWarning(String prefix, String message, Throwable exception, Object... args) {
-                sendMessage(Utils.toLoggerMessage(prefix, message), args);
-                Utils.printException(exception, x -> PluginWrapper.this.logWarning(prefix, x, null));
+                sendMessage(Utils.toLoggerMessage(prefix, message, args));
+                Utils.printException(exception, x -> PluginWrapper.getCurrent().logWarning(prefix, x, null));
             }
 
             @Override
             public void logError(String prefix, String message, Throwable exception, Object... args) {
-                sendMessage(Utils.toLoggerMessage(prefix, message), args);
-                Utils.printException(exception, x -> PluginWrapper.this.logError(prefix, x, null));
+                sendMessage(Utils.toLoggerMessage(prefix, message, args));
+                Utils.printException(exception, x -> PluginWrapper.getCurrent().logError(prefix, x, null));
             }
         };
     }
 
     public void onNoArgsCommand(M messageAcceptor) {
-        sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getNoArguments, placeholders());
+        sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getNoArguments, getCommandBasePlaceholders());
     }
 
     public void onReloadCommand(M messageAcceptor) {
-        var placeholders = placeholders();
+        var placeholders = getCommandBasePlaceholders();
         if (PlayerDataFetcher.isBusy()) {
             sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFetcherBusy, placeholders);
             return;
@@ -386,11 +524,10 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
                     .getOnlineAuthentication()
                     .getServices()
                     .stream()
-                    .noneMatch(x -> x.getJsonPathToProperties() != null ||
-                            x.getJsonPathToTextures() != null))
+                    .noneMatch(x -> x.getJsonPathToProperties() != null))
                 fetch = false;
             data = PlayerDataFetcher.pretend(originalUniqueId, username, uniqueId, fetch, createLogger(messageAcceptor));
-            var placeholders = placeholders();
+            var placeholders = getCommandBasePlaceholders();
             if (data != null) {
                 placeholders.put("new_username", data.getUsername());
                 placeholders.put("new_uuid", data.getUniqueId());
@@ -402,7 +539,7 @@ public abstract class PluginWrapper<P, T, L, S, M> implements SimplifiedLogger {
     }
 
     public abstract void sendMessage(M sender, Function<Configuration.CommandMessagesConfiguration, String> message, Map<String, Object> placeholders);
-    public abstract void registerCommand();
+    public abstract void registerCommand(String commandName);
     public abstract boolean isServerOnlineMode();
-    public abstract PluginTaskWrapper<T> scheduleTask(Runnable run, Long repeatInSeconds, long delayInSeconds);
+    public abstract PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds);
 }
