@@ -14,7 +14,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.GameProfile;
 import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.data.ProfileProperty;
+import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import net.kyori.adventure.text.Component;
@@ -82,7 +82,7 @@ public class UUIDSwapperVelocity {
     @Subscribe
     public void handleGameProfileRequest(GameProfileRequestEvent event) {
         var holder = new BiObjectHolder<>(event.getUsername(), event.getGameProfile().getId());
-        var properties = new ArrayList<ProfileProperty>();
+        var properties = new ArrayList<ProfilePropertyWrapper>();
         if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
             event.setGameProfile(new GameProfile(
                     holder.getSecond(),

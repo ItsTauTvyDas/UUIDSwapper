@@ -12,12 +12,12 @@ import java.util.UUID;
 public class OnlinePlayerData {
     private final UUID originalUniqueId;
     private UUID onlineUniqueId;
-    private List<ProfileProperty> properties;
+    private List<ProfilePropertyWrapper> properties;
     private String address;
     private final Long createdAt;
     private Long updatedAt;
 
-    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfileProperty> properties, String address) {
+    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfilePropertyWrapper> properties, String address) {
         this.originalUniqueId = originalUniqueId;
         this.onlineUniqueId = onlineUniqueId;
         this.properties = properties;

@@ -1,7 +1,7 @@
 package me.itstautvydas.uuidswapper.loader;
 
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.data.ProfileProperty;
+import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import net.md_5.bungee.api.ProxyServer;
@@ -67,7 +67,7 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
 
     private void changeGameProfile(PendingConnection connection) {
         var holder = new BiObjectHolder<>(connection.getName(), connection.getUniqueId());
-        var properties = new ArrayList<ProfileProperty>();
+        var properties = new ArrayList<ProfilePropertyWrapper>();
         if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
             updatePlayer(connection, holder.getFirst(), holder.getSecond(), properties);
         }
@@ -78,7 +78,7 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
     private static Field loginProfileField;
 //    private static Field propertiesField;
 
-    private boolean updatePlayer(PendingConnection connection, String newUsername, UUID uniqueId, List<ProfileProperty> properties) {
+    private boolean updatePlayer(PendingConnection connection, String newUsername, UUID uniqueId, List<ProfilePropertyWrapper> properties) {
         try {
             if (nameField == null) {
                 nameField = connection.getClass().getDeclaredField("name");

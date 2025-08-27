@@ -14,5 +14,5 @@ public class PlayerData {
     private final String username;
     private final UUID uniqueId;
     @Setter
-    private List<ProfileProperty> properties;
+    private List<ProfilePropertyWrapper> properties;
 }

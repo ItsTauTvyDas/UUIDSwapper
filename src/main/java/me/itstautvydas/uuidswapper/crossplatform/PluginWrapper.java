@@ -14,7 +14,7 @@ import me.itstautvydas.uuidswapper.crossplatform.wrapper.VelocityPluginWrapper;
 import me.itstautvydas.uuidswapper.data.Message;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
-import me.itstautvydas.uuidswapper.data.ProfileProperty;
+import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.database.CacheDatabaseManager;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
@@ -274,7 +274,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     public CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> onPlayerLogin(
             @NotNull String username,
             @Nullable UUID uniqueId,
-            @Nullable List<ProfileProperty> properties,
+            @Nullable List<ProfilePropertyWrapper> properties,
             @NotNull String address,
             boolean cacheFetchedData,
             @Nullable Runnable switchToOfflineMode,
@@ -376,7 +376,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     public boolean onGameProfileRequest(
             @NotNull BiObjectHolder<String, UUID> profile,
-            @NotNull List<ProfileProperty> properties
+            @NotNull List<ProfilePropertyWrapper> properties
     ) {
         boolean changed = false;
         var pretendData = PlayerDataFetcher.pullPretender(profile.getSecond());

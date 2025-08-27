@@ -1,7 +1,7 @@
 package me.itstautvydas.uuidswapper.loader;
 
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.data.ProfileProperty;
+import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import net.kyori.adventure.text.Component;
@@ -45,7 +45,7 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
                 event.getUniqueId(),
                 event.getPlayerProfile().getProperties()
                         .stream()
-                        .map(x -> new ProfileProperty(
+                        .map(x -> new ProfilePropertyWrapper(
                                 x.getName(), x.getValue(), x.getSignature()
                         ))
                         .toList(),
@@ -68,7 +68,7 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
         ).join();
 
         var holder = new BiObjectHolder<>(event.getName(), event.getUniqueId());
-        var properties = new ArrayList<ProfileProperty>();
+        var properties = new ArrayList<ProfilePropertyWrapper>();
         if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
             var profile = Bukkit.createProfile(holder.getSecond(), holder.getFirst());
             profile.setProperties(properties.stream()
