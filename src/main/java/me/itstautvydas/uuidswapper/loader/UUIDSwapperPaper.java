@@ -1,5 +1,6 @@
 package me.itstautvydas.uuidswapper.loader;
 
+import com.destroystokyo.paper.profile.ProfileProperty;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
@@ -72,7 +73,7 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
         if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
             var profile = Bukkit.createProfile(holder.getSecond(), holder.getFirst());
             profile.setProperties(properties.stream()
-                    .map(x -> new com.destroystokyo.paper.profile.ProfileProperty(
+                    .map(x -> new ProfileProperty(
                             x.getName(), x.getValue(), x.getSignature()
                     )).toList());
             event.setPlayerProfile(profile);
