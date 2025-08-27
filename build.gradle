@@ -46,7 +46,7 @@ dependencies {
 
     compileOnly "net.md-5:bungeecord-api:1.21-R0.4-SNAPSHOT"
     compileOnly "com.velocitypowered:velocity-api:3.4.0-SNAPSHOT"
-    // Paper/Folia API is being added below
+    // Paper/Folia API are being added below
 }
 
 // Java compiling
@@ -57,6 +57,30 @@ java {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     options.release.set(targetJavaVersion)
+}
+
+// Testing
+sourceSets {
+    test {
+        java {
+            srcDirs "src/test/java"
+        }
+    }
+}
+
+dependencies {
+    testImplementation "com.google.code.gson:gson:2.11.0"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.named("jar") {
+    dependsOn("test")
 }
 
 // Resources processing
