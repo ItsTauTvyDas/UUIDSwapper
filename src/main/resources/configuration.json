@@ -30,14 +30,10 @@
       "enabled": true,
       "keep-time": 7200
     },
-    "username-changes": {
-      "check-depending-on-ip-address": false,
-      "check-player-cache": true
-    },
     "service-defaults": {
       "expect-status-code": 200,
-      "bad-uuid-disconnect-message": "&cFailed to get your online UUID (bad UUID), contact server's administrator!",
       "default-disconnect-message": "&cFailed to get your online UUID",
+      "bad-uuid-disconnect-message": "&cFailed to get your online UUID (bad UUID), contact server's administrator!",
       "connection-error-disconnect-message": "&cFailed to get your online UUID (connection error), contact server's administrator!",
       "service-bad-status-disconnect-message": "&cFailed to get your online UUID (service returned {http.status}), contact server's administrator!",
       "unknown-error-disconnect-message": "&cFailed to get your online UUID (unknown error), contact server's administrator!",
@@ -54,7 +50,9 @@
       ],
       "headers": {
         "Accept": "application/json"
-      }
+      },
+      "query-data": {},
+      "post-data": {}
     },
     "services": [
       {
@@ -65,7 +63,7 @@
         "ignore-status-code": true,
         "response-handlers": [
           {
-            "state": "AFTER_UUID",
+            "state": "AFTER_REQUEST",
             "allow-player-to-join": true,
             "conditions": {
               "response.code": "minecraft.invalid_username"
@@ -78,10 +76,10 @@
         "endpoint": "https://api.mojang.com/users/profiles/minecraft/{username}",
         "json-path-to-uuid": "id",
         "ignore-status-code": true,
-        "request-services-for-properties": ["MojangAPI-properties"],
+        "request-services-for-properties": ["MojangSessionServer"],
         "response-handlers": [
           {
-            "state": "AFTER_UUID",
+            "state": "AFTER_REQUEST",
             "allow-player-to-join": true,
             "conditions": {
               "::response.errorMessage": true
@@ -90,7 +88,7 @@
         ]
       },
       {
-        "name": "MojangAPI-properties",
+        "name": "MojangSessionServer",
         "endpoint": "https://sessionserver.mojang.com/session/minecraft/profile/{response.id}",
         "query-data": {
           "unsigned": false
@@ -114,6 +112,10 @@
     "unique-id": {
       "randomize": true,
       "save": false
+    },
+    "skin": {
+      "randomize": true,
+      "skin-pack-txt-path": "skin-packs/random.txt"
     }
   },
   "swapped-unique-ids": {
@@ -129,6 +131,16 @@
       "u:Notch": "Herobrine",
       "00000000-0000-0000-0000-000000000000": "jeb_"
     }
+  },
+  "custom-players-skin": {
+    "enabled": false,
+    "map": {
+      "u:Notch": ""
+    }
+  },
+  "internals": {
+    "match-username-and-unique-id-in-properties": true,
+    "remove-property-signature-for-custom-skins": true
   },
   "command-messages": {
     "prefix": "&b[UUIDSwapper] &r",

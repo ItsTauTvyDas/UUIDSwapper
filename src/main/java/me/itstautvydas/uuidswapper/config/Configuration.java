@@ -51,14 +51,6 @@ public class Configuration {
 
     @ToString
     @Getter
-    public static class UsernameChangesConfiguration {
-        private boolean checkDependingOnIpAddress = false;
-        private boolean checkPlayerCache = true;
-    }
-
-
-    @ToString
-    @Getter
     public static class ResponseHandlerConfiguration {
         @RequiredProperty
         private long order = 9999;
@@ -237,8 +229,6 @@ public class Configuration {
         @RequiredProperty
         private CachingConfiguration caching;
         @RequiredProperty
-        private UsernameChangesConfiguration usernameChanges;
-        @RequiredProperty
         private DefaultServiceConfiguration serviceDefaults;
         @RequiredProperty
         private List<ServiceConfiguration> services;
@@ -328,6 +318,13 @@ public class Configuration {
     public static class SwappedPlayerNamesConfiguration extends SwappedUniqueIdsConfiguration {
     }
 
+    @ToString
+    @Getter
+    public static class InternalsConfiguration {
+        private boolean matchUsernameAndUniqueIdInProperties;
+        private boolean removePropertySignatureForCustomSkins;
+    }
+
     @RequiredProperty
     private PaperConfiguration paper;
     @RequiredProperty
@@ -340,6 +337,8 @@ public class Configuration {
     private SwappedUniqueIdsConfiguration swappedUniqueIds;
     @RequiredProperty
     private SwappedPlayerNamesConfiguration swappedPlayerNames;
+    @RequiredProperty
+    private InternalsConfiguration internals;
     @RequiredProperty
     private CommandMessagesConfiguration commandMessages;
 }
