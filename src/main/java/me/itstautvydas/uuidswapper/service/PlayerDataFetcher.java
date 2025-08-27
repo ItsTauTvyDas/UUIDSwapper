@@ -43,7 +43,7 @@ public class PlayerDataFetcher {
         return !workers.isEmpty();
     }
 
-    public static void setPlayerProperties(UUID originalUniqueId, List<ProfileProperty> properties) {
+    public static void setPlayerProperties(UUID originalUniqueId, List<ProfilePropertyWrapper> properties) {
         var fetched = fetchedPlayerDataMap.get(originalUniqueId);
         if (fetched != null) {
             fetched.setProperties(properties);
@@ -172,7 +172,17 @@ public class PlayerDataFetcher {
             }
 
             return fetcher.getOutput();
-        }).whenComplete((result, ex) -> workers.remove(fetcher));
+        }).whenComplete((result, ex) -> {
+            workers.remove(fetcher);
+            if (ex == null && result.containsFirst() && PluginWrapper.getCurrent().getConfiguration()
+                    .getInternals().isMatchUsernameAndUniqueIdInProperties()) {
+                var data = result.getFirst();
+                if (data.getProperties() != null) {
+                    for (var property : data.getProperties())
+                        DecodedPlayerProperty.decode(property).match(null, data.getOnlineUniqueId()).encode();
+                }
+            }
+        });
     }
 
     // Made a class because of how many variables I need to share...
@@ -281,8 +291,8 @@ public class PlayerDataFetcher {
                                     ? ex.getCause() : ex)).join();
         }
 
-        List<ProfileProperty> fetchProperties(Configuration.ServiceConfiguration service, Object serviceResponseBody) {
-            List<ProfileProperty> properties = null;
+        List<ProfilePropertyWrapper> fetchProperties(Configuration.ServiceConfiguration service, Object serviceResponseBody) {
+            List<ProfilePropertyWrapper> properties = null;
             var propertiesServices = new ArrayList<String>();
             if (service.canRetrieveProperties())
                 propertiesServices.add(null);
@@ -343,7 +353,7 @@ public class PlayerDataFetcher {
                                         .asList()
                                         .stream()
                                         .map(JsonElement::getAsJsonObject)
-                                        .map(x -> new ProfileProperty(
+                                        .map(x -> new ProfilePropertyWrapper(
                                                 x.get("name").getAsString(),
                                                 x.get("value").getAsString(),
                                                 x.get("signature").getAsString()
@@ -351,7 +361,7 @@ public class PlayerDataFetcher {
                                         .toList();
                             } else if (propertiesJsonElement.isJsonObject()) {
                                 properties = List.of(
-                                        new ProfileProperty(
+                                        new ProfilePropertyWrapper(
                                                 propertiesJsonElement.getAsJsonObject().get("name").getAsString(),
                                                 propertiesJsonElement.getAsJsonObject().get("value").getAsString(),
                                                 propertiesJsonElement.getAsJsonObject().get("signature").getAsString()
@@ -375,7 +385,7 @@ public class PlayerDataFetcher {
             }
 
             if (properties == null && sendErrorMessages)
-                    logger.logWarning(getPrefix(service.getName()), "Failed to retrieve properties (even if fallbacks were used)", null);
+                logger.logWarning(getPrefix(service.getName()), "Failed to retrieve properties (even if fallbacks were used)", null);
 
             return properties;
         }
@@ -540,7 +550,7 @@ public class PlayerDataFetcher {
                     }
                 }
 
-                List<ProfileProperty> properties = fetchProperties(service, responseBody);
+                List<ProfilePropertyWrapper> properties = fetchProperties(service, responseBody);
                 if (sendMessages && properties != null)
                     logger.logInfo(prefix, "Properties successfully fetched for %s", username);
 
