@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
-@SuppressWarnings("unused")
 public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Server, CommandContext<CommandSourceStack>> {
     @Override
     public void sendMessage(CommandContext<CommandSourceStack> ctx, Function<Configuration.CommandMessagesConfiguration, String> message, Map<String, Object> placeholders) {
@@ -54,38 +53,37 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Serv
 
     @Override
     public void registerCommand(String commandName) {
-        handle.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands -> {
-            commands.registrar().register(Commands.literal(commandName)
-                            .requires(source -> source.getSender().hasPermission(Utils.COMMAND_PERMISSION))
-                            .executes(ctx -> {
-                                onNoArgsCommand(ctx);
-                                return Command.SINGLE_SUCCESS;
-                            })
-                            .then(Commands.literal("reload")
-                                    .requires(source -> source.getSender().hasPermission(Utils.RELOAD_COMMAND_PERMISSION))
-                                    .executes(ctx -> {
-                                        onReloadCommand(ctx);
-                                        return Command.SINGLE_SUCCESS;
-                                    }))
-                            .then(Commands.literal("pretend")
-                                    .requires(source -> source.getSender().hasPermission(Utils.PRETEND_COMMAND_PERMISSION))
-                                    .then(Commands.argument("username", StringArgumentType.word())
-                                            .executes(ctx -> {
-                                                pretend(ctx);
-                                                return Command.SINGLE_SUCCESS;
-                                            })
-                                            .then(Commands.argument("fetchProperties", BoolArgumentType.bool())
-                                                    .executes(ctx -> {
-                                                        pretend(ctx);
-                                                        return Command.SINGLE_SUCCESS;
-                                                    })
-                                                    .then(Commands.argument("uniqueId", ArgumentTypes.uuid())
-                                                            .executes(ctx -> {
-                                                                pretend(ctx);
-                                                                return Command.SINGLE_SUCCESS;
-                                                            })))))
-                    .build());
-        });
+        handle.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, commands ->
+                commands.registrar().register(Commands.literal(commandName)
+                        .requires(source -> source.getSender().hasPermission(Utils.COMMAND_PERMISSION))
+                        .executes(ctx -> {
+                            onNoArgsCommand(ctx);
+                            return Command.SINGLE_SUCCESS;
+                        })
+                        .then(Commands.literal("reload")
+                                .requires(source -> source.getSender().hasPermission(Utils.RELOAD_COMMAND_PERMISSION))
+                                .executes(ctx -> {
+                                    onReloadCommand(ctx);
+                                    return Command.SINGLE_SUCCESS;
+                                }))
+                        .then(Commands.literal("pretend")
+                                .requires(source -> source.getSender().hasPermission(Utils.PRETEND_COMMAND_PERMISSION))
+                                .then(Commands.argument("username", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            pretend(ctx);
+                                            return Command.SINGLE_SUCCESS;
+                                        })
+                                        .then(Commands.argument("fetchProperties", BoolArgumentType.bool())
+                                                .executes(ctx -> {
+                                                    pretend(ctx);
+                                                    return Command.SINGLE_SUCCESS;
+                                                })
+                                                .then(Commands.argument("uniqueId", ArgumentTypes.uuid())
+                                                        .executes(ctx -> {
+                                                            pretend(ctx);
+                                                            return Command.SINGLE_SUCCESS;
+                                                        })))))
+                .build()));
     }
 
     @Override
