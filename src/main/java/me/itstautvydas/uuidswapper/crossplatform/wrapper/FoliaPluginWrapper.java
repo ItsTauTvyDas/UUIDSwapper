@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.TimeUnit;
 
+@SuppressWarnings("unused")
 public class FoliaPluginWrapper extends PaperPluginWrapper {
     @Override
     public PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds) {
