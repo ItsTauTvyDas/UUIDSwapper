@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.ToString;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
+import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.enums.ConditionsMode;
 import me.itstautvydas.uuidswapper.enums.ConsoleMessageType;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
@@ -69,6 +70,7 @@ public class Configuration {
 
         private ConditionsMode conditionsMode;
         private boolean ignoreConditionsCase;
+        private boolean forceStringOnConditions;
         private Map<String, Object> conditions;
 
         public boolean testConditions(Map<String, Object> placeholders) {
@@ -76,22 +78,42 @@ public class Configuration {
                 return true;
             Boolean result = null;
             for (var entry : conditions.entrySet()) {
-                @Nullable var conditionValue = entry.getValue();
                 boolean conditionResult;
-                if (entry.getKey().startsWith("::")) {
+                if (entry.getKey().startsWith("?")) {
                     if (entry.getValue() instanceof Boolean bool)
-                        conditionResult = placeholders.containsKey(entry.getKey().substring(2)) == bool;
+                        conditionResult = placeholders.containsKey(entry.getKey().substring(1)) == bool;
                     else
                         conditionResult = false;
+                } else if (entry.getKey().startsWith("config::")) {
+                    try {
+                        var jsonValue = Utils.getJsonValue(
+                                PluginWrapper.getCurrent().getRawConfiguration(),
+                                entry.getKey().substring(8)
+                        );
+                        if (entry.getValue() == null || jsonValue == null) {
+                            conditionResult = Objects.equals(entry.getValue(), jsonValue);
+                        } else {
+                            if (ignoreConditionsCase)
+                                conditionResult = jsonValue.toString().equalsIgnoreCase(entry.getValue().toString());
+                            else if (forceStringOnConditions)
+                                conditionResult = jsonValue.toString().equals(entry.getValue().toString());
+                            else
+                                conditionResult = jsonValue.equals(entry.getValue());
+                        }
+                    } catch (Exception e) {
+                        conditionResult = false;
+                    }
                 } else {
                     @Nullable var value = placeholders.get(entry.getKey());
-                    if (conditionValue == null || value == null) {
-                        conditionResult = Objects.equals(conditionValue, value);
+                    if (entry.getValue() == null || value == null) {
+                        conditionResult = Objects.equals(entry.getValue(), value);
                     } else {
                         if (ignoreConditionsCase)
-                            conditionResult = conditionValue.toString().equalsIgnoreCase(value.toString());
+                            conditionResult = entry.getValue().toString().equalsIgnoreCase(value.toString());
+                        else if (forceStringOnConditions)
+                            conditionResult = entry.getValue().toString().equals(value.toString());
                         else
-                            conditionResult = conditionValue.equals(value);
+                            conditionResult = entry.getValue().equals(value);
                     }
                 }
                 if (result == null) {
