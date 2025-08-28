@@ -1,8 +1,6 @@
 package me.itstautvydas.uuidswapper;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import lombok.experimental.UtilityClass;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,7 +24,9 @@ public class Utils {
     public final String DEBUG_COMMAND_PERMISSION = "uuidswapper.command.debug";
     public final String PRETEND_COMMAND_PERMISSION = "uuidswapper.command.pretend";
 
-    public final String GENERIC_DISCONNECT_MESSAGE = "multiplayer.disconnect.generic";
+    public final String GENERIC_DISCONNECT_MESSAGE_ID = "multiplayer.disconnect.generic";
+
+    public final Gson DEFAULT_GSON = new GsonBuilder().create();
 
     public boolean isRunningFolia() {
         try {
