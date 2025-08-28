@@ -1,9 +1,6 @@
 package me.itstautvydas.uuidswapper.crossplatform;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 import com.google.gson.internal.LinkedTreeMap;
 import lombok.Getter;
 import me.itstautvydas.BuildConstants;
@@ -111,7 +108,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     @Getter
     private Configuration configuration;
-    private Path driversDirectory;
+    @Getter
+    private JsonElement rawConfiguration;
     @Getter
     private CacheDatabaseManager database;
     @Getter
@@ -170,7 +168,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 //        return configuration;
 //    }
 
-    public Object loadConfiguration(boolean asJsonObject) throws Exception {
+    public <CC> BiObjectHolder<CC, JsonElement> loadConfiguration(Class<CC> configurationClass) throws Exception {
         var configurationPath = getConfigurationPath();
         if (Files.notExists(configurationPath)) {
             try (InputStream in = getClass().getClassLoader().getResourceAsStream("configuration.json")) {
@@ -182,10 +180,11 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         }
 
         try (var reader = new FileReader(configurationPath.toFile())) {
-            if (asJsonObject)
-                return JsonParser.parseReader(reader).getAsJsonObject();
-            else
-                return GSON.fromJson(reader, Configuration.class);
+            JsonElement root = JsonParser.parseReader(reader);
+            CC configuration = null;
+            if (configurationClass != null)
+                configuration = GSON.fromJson(root, configurationClass);
+            return new BiObjectHolder<>(configuration, root);
         } catch (JsonParseException e) {
             throw new IOException("Invalid " + configurationPath.getFileName() + " format", e);
         }
@@ -225,11 +224,12 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     public void reloadConfiguration() throws Exception {
         Files.createDirectories(dataDirectory);
-        driversDirectory = dataDirectory.resolve("drivers");
-        Files.createDirectories(driversDirectory);
+        Files.createDirectories(dataDirectory.resolve("drivers"));
 
         InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.put(GSON, new ArrayList<>());
-        configuration = (Configuration) loadConfiguration(false);
+        var configurations = loadConfiguration((Class<Configuration>)null);
+        configuration = configurations.getFirst();
+        rawConfiguration = configurations.getSecond();
         var invalidFields = InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.get(GSON);
 
         for (var service : configuration.getOnlineAuthentication().getServices())
