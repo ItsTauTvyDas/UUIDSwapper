@@ -1,12 +1,16 @@
 package me.itstautvydas.uuidswapper.config;
 
+import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
 import lombok.Getter;
 import lombok.ToString;
+import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 import me.itstautvydas.uuidswapper.enums.ConditionsMode;
+import me.itstautvydas.uuidswapper.enums.ConsoleMessageType;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
-import me.itstautvydas.uuidswapper.enums.ResponseHandlerState;
+import me.itstautvydas.uuidswapper.enums.ServiceStateEvent;
+import me.itstautvydas.uuidswapper.interfaces.PostProcessable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -51,21 +55,24 @@ public class Configuration {
 
     @ToString
     @Getter
-    public static class ResponseHandlerConfiguration {
+    public static class ResponseHandlerConfiguration implements PostProcessable {
         @RequiredProperty
         private long order = 9999;
         @RequiredProperty
-        private ResponseHandlerState state;
-        private Boolean allowPlayerToJoin = null;
-        private Boolean useFallback = null;
-        private boolean applyProperties;
+        private ServiceStateEvent event;
+        private Boolean allowPlayerToJoin;
+        private Boolean applyProperties;
         private String disconnectMessage;
-        private ConditionsMode conditionsMode = ConditionsMode.AND;
-        private boolean ignoreConditionsCase = false;
-        private Map<String, Object> conditions = new HashMap<>();
+        private String fetchProperties;
+        private String messageToConsole;
+        private ConsoleMessageType consoleMessageType;
+
+        private ConditionsMode conditionsMode;
+        private boolean ignoreConditionsCase;
+        private Map<String, Object> conditions;
 
         public boolean testConditions(Map<String, Object> placeholders) {
-            if (conditions.isEmpty())
+            if (conditions == null || conditions.isEmpty())
                 return true;
             Boolean result = null;
             for (var entry : conditions.entrySet()) {
@@ -98,6 +105,28 @@ public class Configuration {
             }
             return result;
         }
+
+        @Override
+        public void postProcessed() {
+            if (consoleMessageType == null)
+                consoleMessageType = ConsoleMessageType.INFO;
+            if (conditionsMode == null)
+                conditionsMode = ConditionsMode.AND;
+        }
+
+        public String resultToString() {
+            var json = new JsonObject();
+            json.addProperty("event", event.toString());
+            json.addProperty("order", order);
+            json.addProperty("mode", conditionsMode.toString());
+            if (allowPlayerToJoin != null)
+                json.addProperty("allowPlayerToJoin", allowPlayerToJoin);
+            if (allowPlayerToJoin != null)
+                json.addProperty("useFallback", allowPlayerToJoin);
+            if (applyProperties != null)
+                json.addProperty("applyProperties", applyProperties);
+            return Utils.DEFAULT_GSON.toJson(json);
+        }
     }
 
     @ToString
@@ -113,17 +142,12 @@ public class Configuration {
         protected Integer expectStatusCode;
         protected Long timeout;
         protected Boolean allowCaching;
-        protected Boolean ignoreStatusCode;
         @SerializedName("debug")
         protected Boolean debugEnabled;
         protected LinkedHashSet<FallbackUsage> useFallbacks;
         protected Map<String, String> postData;
         protected Map<String, String> queryData;
         protected Map<String, String> headers;
-
-        public int getExpectStatusCode() {
-            return expectStatusCode;
-        }
 
         public long getTimeout() {
             return timeout;
@@ -136,15 +160,12 @@ public class Configuration {
         public boolean isAllowCaching() {
             return Boolean.TRUE.equals(allowCaching);
         }
-
-        public boolean isIgnoreStatusCode() {
-            return Boolean.TRUE.equals(ignoreStatusCode);
-        }
     }
 
     @ToString(callSuper = true)
     @Getter
-    public static class ServiceConfiguration extends DefaultServiceConfiguration {
+    public static class ServiceConfiguration extends DefaultServiceConfiguration implements PostProcessable {
+        private boolean enabled;
         @RequiredProperty
         private String name;
         @RequiredProperty
@@ -165,7 +186,6 @@ public class Configuration {
             this.expectStatusCode = defaultValue(expectStatusCode, service.expectStatusCode, 200);
             this.timeout = defaultValue(timeout, service.timeout, 3000L);
             this.allowCaching = defaultValue(allowCaching, service.allowCaching, true);
-            this.ignoreStatusCode = defaultValue(ignoreStatusCode, service.ignoreStatusCode, false);
             this.debugEnabled = defaultValue(debugEnabled, service.debugEnabled, false);
             this.useFallbacks = defaultValue(useFallbacks, service.getUseFallbacks(), new LinkedHashSet<>());
             this.postData = defaultValue(postData, service.getPostData(), new HashMap<>());
@@ -182,13 +202,9 @@ public class Configuration {
             return current;
         }
 
-        public void sortResponseHandlers() {
-            responseHandlers.sort(Comparator.comparingLong(ResponseHandlerConfiguration::getOrder));
-        }
-
-        public ResponseHandlerConfiguration executeResponseHandlers(ResponseHandlerState state, Map<String, Object> placeholders) {
+        public ResponseHandlerConfiguration executeResponseHandlers(ServiceStateEvent state, Map<String, Object> placeholders) {
             for (var handler : responseHandlers) {
-                if (handler.state == state && handler.testConditions(placeholders))
+                if (handler.event == state && handler.testConditions(placeholders))
                     return handler;
             }
             return null;
@@ -205,11 +221,16 @@ public class Configuration {
         public boolean canRetrieveProperties() {
             return jsonPathToProperties != null;
         }
+
+        @Override
+        public void postProcessed() {
+            responseHandlers.sort(Comparator.comparingLong(ResponseHandlerConfiguration::getOrder));
+        }
     }
 
     @ToString
     @Getter
-    public static class OnlineAuthenticationConfiguration {
+    public static class OnlineAuthenticationConfiguration implements PostProcessable {
         @RequiredProperty
         private boolean enabled;
         @RequiredProperty
@@ -239,6 +260,14 @@ public class Configuration {
                     .filter(s -> Objects.equals(s.getName(), name))
                     .findFirst()
                     .orElse(null);
+        }
+
+        @Override
+        public void postProcessed() {
+            serviceConnectionThrottle = Math.max(serviceConnectionThrottle, 0);
+            minTimeout = Math.max(minTimeout, 0);
+            maxTimeout = Math.max(maxTimeout, 500);
+            fallbackServiceRememberTime = Math.max(fallbackServiceRememberTime, -1);
         }
     }
 
@@ -311,18 +340,11 @@ public class Configuration {
         @RequiredProperty
         private boolean enabled;
         @RequiredProperty
-        private Map<String, String> map;
+        private Map<String, String> swap;
     }
 
     @ToString(callSuper = true)
     public static class SwappedPlayerNamesConfiguration extends SwappedUniqueIdsConfiguration {
-    }
-
-    @ToString
-    @Getter
-    public static class InternalsConfiguration {
-        private boolean matchUsernameAndUniqueIdInProperties;
-        private boolean removePropertySignatureForCustomSkins;
     }
 
     @RequiredProperty
@@ -337,8 +359,6 @@ public class Configuration {
     private SwappedUniqueIdsConfiguration swappedUniqueIds;
     @RequiredProperty
     private SwappedPlayerNamesConfiguration swappedPlayerNames;
-    @RequiredProperty
-    private InternalsConfiguration internals;
     @RequiredProperty
     private CommandMessagesConfiguration commandMessages;
 }
