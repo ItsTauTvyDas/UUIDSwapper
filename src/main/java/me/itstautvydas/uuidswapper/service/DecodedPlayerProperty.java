@@ -13,6 +13,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 @ToString
+@Deprecated(forRemoval = true)
 public class DecodedPlayerProperty {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -47,12 +48,14 @@ public class DecodedPlayerProperty {
         };
     }
 
-    public void setCapeUrl(@Nullable String capeUrl, boolean removeIfNull) {
+    public DecodedPlayerProperty setCapeUrl(@Nullable String capeUrl, boolean removeIfNull) {
         this.capeUrl = (capeUrl == null && removeIfNull) ? null : capeUrl;
+        return this;
     }
 
-    public void setSkinUrl(@Nullable String skinUrl, boolean removeIfNull) {
+    public DecodedPlayerProperty setSkinUrl(@Nullable String skinUrl, boolean removeIfNull) {
         this.skinUrl = (skinUrl == null && removeIfNull) ? null : skinUrl;
+        return this;
     }
 
     public DecodedPlayerProperty match(@Nullable String username, @Nullable UUID uniqueId) {
@@ -65,25 +68,25 @@ public class DecodedPlayerProperty {
 
     public DecodedPlayerProperty removeSignature() {
         original.setSignature(null);
-        parsedJson.remove("signatureRequired");
-        parsedJson.addProperty("timestamp", System.currentTimeMillis());
+        parsedJson.addProperty("signatureRequired", false);
+//        parsedJson.addProperty("timestamp", System.currentTimeMillis());
         return this;
     }
 
     public ProfilePropertyWrapper encode() {
-        var textures = new JsonObject();
+        var textures = parsedJson.getAsJsonObject("textures");
         if (skinUrl != null) {
             var skin = new JsonObject();
             skin.addProperty("url", skinUrl);
             textures.add("SKIN", skin);
         }
         if (capeUrl != null) {
-            var skin = new JsonObject();
-            skin.addProperty("url", capeUrl);
-            textures.add("CAPE", skin);
+            var cape = new JsonObject();
+            cape.addProperty("url", capeUrl);
+            textures.add("CAPE", cape);
         }
-        parsedJson.add("textures", textures);
         original.setValue(Base64.getEncoder().encodeToString(GSON.toJson(parsedJson).getBytes()));
+        System.out.println(parsedJson);
         return original;
     }
 }
