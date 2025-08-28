@@ -20,10 +20,7 @@ import me.itstautvydas.uuidswapper.enums.PlatformType;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
 import me.itstautvydas.uuidswapper.helper.SimplifiedLogger;
-import me.itstautvydas.uuidswapper.json.InvalidFieldsCollectorAdapterFactory;
-import me.itstautvydas.uuidswapper.json.RequiredPropertyAdapterFactory;
-import me.itstautvydas.uuidswapper.json.SortedJsonSerializer;
-import me.itstautvydas.uuidswapper.json.StringListToStringAdapter;
+import me.itstautvydas.uuidswapper.json.*;
 import me.itstautvydas.uuidswapper.randomizer.PlayerRandomizer;
 import me.itstautvydas.uuidswapper.service.PlayerDataFetcher;
 import org.jetbrains.annotations.NotNull;
@@ -44,7 +41,7 @@ import java.util.function.Function;
 public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     private static final String CONFIGURATION_PREFIX = "Configuration";
     private static PluginWrapper<?, ?, ?, ?> CURRENT;
-    private static final Gson GSON = new GsonBuilder()
+    public static final Gson GSON = new GsonBuilder()
             .setFieldNamingStrategy(f -> {
                 String fieldName = f.getName();
                 StringBuilder sb = new StringBuilder();
@@ -61,6 +58,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             .disableHtmlEscaping()
             .registerTypeAdapterFactory(new InvalidFieldsCollectorAdapterFactory())
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
+            .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
             .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
@@ -201,6 +199,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             throw new RuntimeException(ex);
         }
         database = new CacheDatabaseManager();
+        if (database.getConfiguration().isEnabled())
+            database.loadDriverFromConfiguration();
     }
 
     public void onEnable() {
@@ -230,11 +230,11 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
         InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.put(GSON, new ArrayList<>());
         configuration = (Configuration) loadConfiguration(false);
-        for (var service : configuration.getOnlineAuthentication().getServices()) {
-            service.sortResponseHandlers();
-            service.setDefaults(configuration.getOnlineAuthentication().getServiceDefaults());
-        }
         var invalidFields = InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.get(GSON);
+
+        for (var service : configuration.getOnlineAuthentication().getServices())
+            service.setDefaults(configuration.getOnlineAuthentication().getServiceDefaults());
+
         if (invalidFields != null) {
             for (var field : invalidFields)
                 logWarning(CONFIGURATION_PREFIX + "/Checker", "Unknown JSON field: " + field, null);
@@ -253,14 +253,14 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         logInfo(CONFIGURATION_PREFIX, "Using online UUIDs => %s", configuration.getOnlineAuthentication().isEnabled());
 
         if (configuration.getSwappedUniqueIds().isEnabled()) {
-            logInfo(CONFIGURATION_PREFIX, "Loaded %s swapped UUIDs.", configuration.getSwappedUniqueIds().getMap().size());
-            for (var entry : configuration.getSwappedUniqueIds().getMap().entrySet())
+            logInfo(CONFIGURATION_PREFIX, "Loaded %s swapped UUIDs.", configuration.getSwappedUniqueIds().getSwap().size());
+            for (var entry : configuration.getSwappedUniqueIds().getSwap().entrySet())
                 log(entry);
         }
 
         if (configuration.getSwappedPlayerNames().isEnabled()) {
-            logInfo(CONFIGURATION_PREFIX, "Loaded %s custom player usernames.", configuration.getSwappedPlayerNames().getMap().size());
-            for (var entry : configuration.getSwappedPlayerNames().getMap().entrySet())
+            logInfo(CONFIGURATION_PREFIX, "Loaded %s custom player usernames.", configuration.getSwappedPlayerNames().getSwap().size());
+            for (var entry : configuration.getSwappedPlayerNames().getSwap().entrySet())
                 log(entry);
         }
     }
@@ -288,7 +288,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
             if (PluginWrapper.getCurrent().isServerOnlineMode()) {
                 if (switchToOfflineMode == null) {
-                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE, true));
+                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true));
                     return dummy;
                 }
                 switchToOfflineMode.run();
@@ -305,7 +305,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
                     ));
                     return dummy;
                 } catch (IllegalArgumentException ex) {
-                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE, true));
+                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true));
                     return dummy;
                 }
             }
@@ -344,7 +344,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             return dummy;
         }
 
-        return PlayerDataFetcher.getPlayerData(
+        return PlayerDataFetcher.fetchPlayerData(
                 username,
                 uniqueId,
                 address,
@@ -378,7 +378,6 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             @NotNull BiObjectHolder<String, UUID> profile,
             @NotNull List<ProfilePropertyWrapper> properties
     ) {
-        boolean changed = false;
         var pretendData = PlayerDataFetcher.pullPretender(profile.getSecond());
         if (pretendData != null) {
             profile.setFirst(pretendData.getUsername());
@@ -416,6 +415,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             return true;
         }
 
+        boolean changed = false;
         if (configuration.getOnlineAuthentication().isEnabled()) {
             var fetched = PlayerDataFetcher.pullPlayerData(profile.getSecond());
             if (fetched != null) {
@@ -430,12 +430,12 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         String swappedUniqueId = null;
 
         if (configuration.getSwappedUniqueIds().isEnabled()) {
-            var swappedUuids = configuration.getSwappedUniqueIds().getMap();
+            var swappedUuids = configuration.getSwappedUniqueIds().getSwap();
             swappedUniqueId = Utils.getSwappedValue(swappedUuids, profile.getFirst(), profile.getSecond());
         }
 
         if (configuration.getSwappedPlayerNames().isEnabled()) {
-            var swappedUsernames = configuration.getSwappedPlayerNames().getMap();
+            var swappedUsernames = configuration.getSwappedPlayerNames().getSwap();
             swappedUsername = Utils.getSwappedValue(swappedUsernames, profile.getFirst(), profile.getSecond());
         }
 
@@ -499,12 +499,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     public void onReloadCommand(M messageAcceptor) {
         var placeholders = getCommandBasePlaceholders();
-        if (PlayerDataFetcher.isBusy()) {
-            sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFetcherBusy, placeholders);
-            return;
-        }
-
         try {
+            PlayerDataFetcher.clearCache();
             reloadConfiguration();
             database.clearConnection();
             if (!database.loadDriverFromConfiguration()) {
