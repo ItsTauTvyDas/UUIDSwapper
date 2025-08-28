@@ -5,5 +5,6 @@ public enum FallbackUsage {
     ON_INVALID_UUID,
     ON_BAD_UUID_PATH,
     ON_UNKNOWN_ERROR,
-    ON_BAD_STATUS
+    ON_BAD_STATUS,
+    ON_NO_PROPERTIES
 }
