@@ -24,7 +24,7 @@ public class CacheDatabaseManager {
     public CacheDatabaseManager() {
         registerDriver("SQLite", SQLiteImplementation::new);
         registerDriver("Memory", MemoryCacheImplementation::new);
-        loadDriverFromConfiguration();
+        registerDriver("Json", MemoryCacheImplementation::new);
     }
 
     public void registerDriver(String name, Supplier<DriverImplementation> driver) {
