@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class PlayerDataFetcher {
     private static final Map<UUID, OnlinePlayerData> fetchedPlayerDataMap = new ConcurrentHashMap<>();
@@ -52,11 +53,14 @@ public class PlayerDataFetcher {
     private boolean sendErrorMessages;
     private boolean sendDebugMessages;
     private OnlinePlayerData fetchedPlayerData;
-    private long timeoutCounter;
+    private long totalExecutionTime;
     private final Map<String, Object> placeholders = new HashMap<>();
     private final Configuration.OnlineAuthenticationConfiguration config;
     private Configuration.ServiceConfiguration service;
     private String servicePrefix;
+    private boolean applyProperties = true;
+    private boolean requireProperties;
+    private UUID rewriteUniqueId;
 
     public PlayerDataFetcher(String username, UUID uniqueId, String remoteAddress, SimplifiedLogger logger,
                              boolean cacheFetchedData, boolean cacheDatabase, boolean forceErrorMessages) {
@@ -68,6 +72,8 @@ public class PlayerDataFetcher {
         this.cacheFetchedData = cacheFetchedData;
         this.cacheDatabase = cacheDatabase;
         this.forceErrorMessages = forceErrorMessages;
+        this.requireProperties = service.isRequireProperties();
+        updateMessages();
     }
 
     public static void setPlayerProperties(UUID originalUniqueId, List<ProfilePropertyWrapper> properties) {
@@ -160,7 +166,6 @@ public class PlayerDataFetcher {
                 cacheFetchedData, cacheDatabase, forceErrorMessages);
 
         return CompletableFuture.supplyAsync(() -> {
-            fetcher.updateMessages();
             var services = new ArrayList<>(fetcher.config.getFallbackServices());
             services.add(0, fetcher.config.getServiceName());
 
@@ -191,14 +196,14 @@ public class PlayerDataFetcher {
                     fetcher.logger.logWarning(prefix, "Defined service's name in 'use-service' failed, using fallback ones!", null);
 
                 if (fetcher.service == null) {
-                    if (fetcher.sendErrorMessages)
-                        fetcher.logger.logWarning(fetcher.servicePrefix, "I do not exist :(", null, name);
+                    if (fetcher.sendMessages)
+                        fetcher.logger.logWarning(fetcher.servicePrefix, "I do not exist in this universe, I shall vanish...", null, name);
                     continue;
                 }
 
                 if (!fetcher.service.isEnabled()) {
                     if (fetcher.sendDebugMessages)
-                        fetcher.logger.logInfo(fetcher.servicePrefix, "(Debug) Disabled, skipping.");
+                        fetcher.logger.logInfo(fetcher.servicePrefix, "(Debug) Service is disabled, skipping.");
                     ignored++;
                     continue;
                 }
@@ -206,21 +211,33 @@ public class PlayerDataFetcher {
                 if (fetcher.service.getJsonPathToUuid() == null && fetcher.service.getJsonPathToProperties() == null) {
                     if (fetcher.sendErrorMessages)
                         fetcher.logger.logWarning(prefix, "Service '%s' doesn't have JSON path to unique ID not properties! Skipping.", null, name);
+                    ignored++;
                     continue;
+                }
+
+                try {
+                    if (!fetcher.service.canSendRequest()) {
+                        if (fetcher.sendErrorMessages)
+                            fetcher.logger.logWarning(fetcher.servicePrefix, "Service got rate-limited!", null, name);
+                        if (!fetcher.disconnectCheckFallback(fetcher.service.getRateLimitedDisconnectMessage(), FallbackUsage.ON_SERVICE_RATE_LIMITED))
+                            break;
+                    }
+                } catch (BreakContinuationException ex) {
+                    break;
                 }
 
                 try {
                     if (!fetcher.fetchService())
                         break;
-                } catch (BreakContinuationException e) {
+                } catch (BreakContinuationException ex) {
                     if (fetcher.sendMessages)
-                        fetcher.logger.logInfo(prefix, "(Debug) Response handler did not allow service to finish: %s", e.getMessage());
+                        fetcher.logger.logInfo(prefix, "(Debug) Response handler did not allow service to finish: %s", ex.getMessage());
                     break;
                 }
             }
 
             if (fetcher.sendMessages)
-                fetcher.logger.logInfo(prefix, "Took %s/%sms to fetch data.", fetcher.timeoutCounter, fetcher.config.getMaxTimeout());
+                fetcher.logger.logInfo(prefix, "Took %s/%sms to fetch data.", fetcher.totalExecutionTime, fetcher.config.getMaxTimeout());
 
             if (fetcher.config.getServiceConnectionThrottle() > 0)
                 throttledConnections.put(uniqueId, System.currentTimeMillis());
@@ -252,14 +269,17 @@ public class PlayerDataFetcher {
         throw new BreakContinuationException("Disconnect - " + message);
     }
 
+    // false - break
+    // true - continue
     private boolean disconnectCheckFallback(String message, FallbackUsage fallbackUsage) throws BreakContinuationException {
         var useFallback = service.getUseFallbacks().contains(fallbackUsage);
-        if (useFallback) {
-            handleResponse(ServiceStateEvent.PRE_FALLBACK_USE);
-            return true;
+        // TODO
+        if (fallbackUsage != FallbackUsage.ON_SUB_SERVICE_RATE_LIMITED) {
+            disconnectNoThrow(message);
+            if (useFallback)
+                handleResponse(ServiceStateEvent.PRE_FALLBACK_USE);
         }
-        disconnectNoThrow(message);
-        return false;
+        return useFallback;
     }
 
     private void updateMessages() {
@@ -292,7 +312,7 @@ public class PlayerDataFetcher {
                     Utils.replacePlaceholders(header.getValue(), placeholders)
             );
 
-        var timeout = config.getMaxTimeout() - timeoutCounter;
+        var timeout = config.getMaxTimeout() - totalExecutionTime;
         if (timeout <= config.getMinTimeout()) {
             if (sendErrorMessages)
                 logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
@@ -309,7 +329,7 @@ public class PlayerDataFetcher {
             if (sendDebugMessages)
                 PluginWrapper.getCurrent().logInfo(
                         servicePrefix,
-                        "(Debug) Found valid response handler from the configuration - ",
+                        "(Debug) Found valid response handler from the configuration ",
                         handler.resultToString()
                 );
 
@@ -319,6 +339,10 @@ public class PlayerDataFetcher {
                     case WARNING -> logger.logWarning(handler.getMessageToConsole(), null);
                     case ERROR -> logger.logError(handler.getMessageToConsole(), null);
                 }
+
+            applyProperties = handler.isApplyProperties();
+            if (handler.getRequireProperties() != null)
+                requireProperties = handler.getRequireProperties();
 
             if (handler.getAllowPlayerToJoin() != null) {
                 if (handler.getAllowPlayerToJoin()) {
@@ -331,15 +355,19 @@ public class PlayerDataFetcher {
         }
     }
 
-    private ResponseData sendRequest(HttpRequest request) {
+    private ResponseData sendRequest(HttpRequest request, ObjectHolder<Long> timeTook) {
+        Objects.requireNonNull(request);
+        var current = System.nanoTime();
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .handle((response, ex) ->
-                        new ResponseData(
-                                response, ex instanceof CompletionException && ex.getCause() != null
-                                ? ex.getCause() : ex)).join();
+                .handle((response, ex) -> {
+                    timeTook.set(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - current));
+                    return new ResponseData(
+                            response, ex instanceof CompletionException && ex.getCause() != null
+                            ? ex.getCause() : ex);
+                }).join();
     }
 
-    public List<ProfilePropertyWrapper> fetchProperties(Object serviceResponseBody) {
+    private List<ProfilePropertyWrapper> fetchProperties(Object serviceResponseBody) throws BreakContinuationException {
         Objects.requireNonNull(service);
 
         List<ProfilePropertyWrapper> properties = null;
@@ -350,6 +378,7 @@ public class PlayerDataFetcher {
             propertiesServices.addAll(service.getRequestServicesForProperties());
 
         String prefix = null;
+        long fetchTook = -1;
         for (var propertyServiceName : propertiesServices) {
             var propertyService = config.getService(propertyServiceName);
             Object responseBody;
@@ -361,22 +390,29 @@ public class PlayerDataFetcher {
                 serviceResponseBody = null; // In case somehow getRequestServiceForProperties() has a null inside
             } else {
                 prefix = getPrefix(propertyServiceName + "#properties");
-                var start = System.currentTimeMillis();
+                if (!propertyService.canSendRequest()) {
+                    if (sendMessages)
+                        logger.logWarning(prefix, "Service got rate-limited!", null);
+                    if (!disconnectCheckFallback(propertyService.getRateLimitedDisconnectMessage(),
+                            FallbackUsage.ON_SUB_SERVICE_RATE_LIMITED))
+                        break;
+                }
                 var request = buildRequest(propertyService, prefix);
                 if (request == null) {
                     if (sendErrorMessages)
                         logger.logError(prefix,
                                 "Not enough time-out for sending this request! reached timeout %sms, min timeout %sms",
-                                null, timeoutCounter, config.getMinTimeout());
+                                null, totalExecutionTime, config.getMinTimeout());
                     break;
                 }
-                var result = sendRequest(request);
-                var took = System.currentTimeMillis() - start;
+                var took = new ObjectHolder<Long>(null);
+                var result = sendRequest(request, took);
+                fetchTook = took.get();
 
                 if (sendDebugMessages)
-                    logger.logInfo(prefix, "(Debug) Took %sms to fetch data.", took);
+                    logger.logInfo(prefix, "(Debug) Took %sms to fetch data.", fetchTook);
 
-                timeoutCounter += took;
+                totalExecutionTime += fetchTook;
 
                 if (result.getException() != null) {
                     Utils.addExceptionPlaceholders(result.getException(), placeholders);
@@ -425,9 +461,7 @@ public class PlayerDataFetcher {
                         }
                     } catch (Exception ex) {
                         if (sendErrorMessages)
-                            logger.logError(prefix, "Failed to fetch profile's properties!", null);
-                        if (sendDebugMessages)
-                            logger.logError("Failed to fetch profile's properties!", ex);
+                            logger.logError(prefix, "Failed to fetch profile's properties!", sendDebugMessages ? ex : null);
                     }
                 } else {
                     if (sendErrorMessages)
@@ -439,7 +473,7 @@ public class PlayerDataFetcher {
         if (properties == null && sendErrorMessages)
             logger.logWarning(servicePrefix, "Failed to retrieve properties (even if fallbacks were used)", null);
         if (properties != null && sendMessages)
-            logger.logInfo(prefix, "Properties successfully fetched for %s", username);
+            logger.logInfo(prefix, "Properties successfully fetched for %s (took %s/%sms", username, fetchTook, config.getMaxTimeout());
         return properties;
     }
 
@@ -448,6 +482,7 @@ public class PlayerDataFetcher {
         var database = PluginWrapper.getCurrent().getDatabase();
         placeholders.clear();
 
+        placeholders.putAll(service.getCustomPlaceholders());
         placeholders.put("username", username);
         placeholders.put("uuid", uniqueId.toString());
         placeholders.put("database-running", database.isDriverRunning());
@@ -458,50 +493,51 @@ public class PlayerDataFetcher {
         try {
             HttpRequest request = buildRequest(service, servicePrefix);
             if (request == null)
-                disconnect(service.getServiceTimeoutDisconnectMessage());
+                return disconnectCheckFallback(service.getTimeoutDisconnectMessage(), FallbackUsage.ON_SERVICE_TIMEOUT);
+//                disconnect(service.getTimeoutDisconnectMessage());
 
             handleResponse(ServiceStateEvent.PRE_REQUEST);
 
-            long start = System.currentTimeMillis();
-            var result = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenApply(response -> new ResponseData(response, null))
-                    .exceptionally(ex ->
-                            new ResponseData(
-                                    null, ex instanceof CompletionException && ex.getCause() != null
-                                    ? ex.getCause() : ex)
-                    ).join();
+            var took = new ObjectHolder<Long>(null);
+            var result = sendRequest(request, took);
             if (result.getException() != null) {
                 Utils.addExceptionPlaceholders(result.getException(), placeholders);
                 if (sendErrorMessages)
-                    logger.logError(servicePrefix, "Connection error (%s), failed to fetch UUID from the service!",
+                    logger.logError(servicePrefix, "Connection error (%s), failed to fetch data from the service!",
                             null, result.getException().getClass().getName());
                 if (sendDebugMessages)
                     logger.logError(result.getException().getMessage(), result.getException());
 
                 if (result.getException() instanceof HttpConnectTimeoutException)
-                    disconnect(service.getServiceTimeoutDisconnectMessage());
+                    return disconnectCheckFallback(service.getTimeoutDisconnectMessage(), FallbackUsage.ON_SERVICE_TIMEOUT);
                 // Might handle more exceptions in the future
                 return disconnectCheckFallback(service.getConnectionErrorDisconnectMessage(), FallbackUsage.ON_CONNECTION_ERROR);
             }
             var response = result.getResponse();
-            long took = System.currentTimeMillis() - start;
+
+            totalExecutionTime += took.get();
 
             placeholders.put("http.url", response.uri().toString());
             placeholders.put("http.status", response.statusCode());
-            placeholders.put("took", took);
-            placeholders.put("timeout-counter", timeoutCounter);
-            placeholders.put("timeout-left", timeoutCounter);
-
-            timeoutCounter += took;
+            placeholders.put("execution-time", took.get());
+            placeholders.put("took", took.get());
+            placeholders.put("total-execution-time", totalExecutionTime);
+            placeholders.put("total-took", totalExecutionTime);
+            placeholders.put("total-execution-time-left", config.getMaxTimeout() - totalExecutionTime);
+            placeholders.put("total-took-left", config.getMaxTimeout() - totalExecutionTime);
 
             if (sendDebugMessages)
-                logger.logInfo(servicePrefix, "(Debug) Took %sms to fetch data.", took);
+                logger.logInfo(servicePrefix, "(Debug) Took %sms to fetch data.", took.get());
 
             if (service.getExpectStatusCode() != null && response.statusCode() != service.getExpectStatusCode()) {
                 if (sendErrorMessages)
                     logger.logError(servicePrefix, "Returned wrong HTTP status code! Got %s, expected %s.",
                             null, response.statusCode(), service.getExpectStatusCode());
-                return disconnectCheckFallback(service.getServiceBadStatusDisconnectMessage(), FallbackUsage.ON_BAD_STATUS);
+                var message = service.getBadStatusDisconnectMessage();
+                var customMessage = service.getCustomStatusCodeDisconnectMessages().get(String.valueOf(response.statusCode()));
+                if (customMessage != null)
+                    message = customMessage.toString();
+                return disconnectCheckFallback(message, FallbackUsage.ON_BAD_STATUS);
             }
 
             Object responseBody;
@@ -526,14 +562,14 @@ public class PlayerDataFetcher {
 
             handleResponse(ServiceStateEvent.POST_REQUEST);
 
-            UUID fetchedUniqueId = null;
+            rewriteUniqueId = null;
             if (service.getJsonPathToUuid() != null) {
-                String fetchedUniqueIdString = null;
+                String fetchedUniqueId = null;
                 try {
                     if (responseBody instanceof JsonElement element)
-                        fetchedUniqueIdString = Utils.getJsonValue(element, service.getJsonPathToUuid()).getAsString();
+                        fetchedUniqueId = Utils.getJsonValue(element, service.getJsonPathToUuid()).getAsString();
                     else
-                        fetchedUniqueIdString = responseBody.toString();
+                        fetchedUniqueId = responseBody.toString();
                 } catch (Exception ex) {
                     Utils.addExceptionPlaceholders(ex, placeholders);
                     if (sendErrorMessages)
@@ -542,46 +578,56 @@ public class PlayerDataFetcher {
                         logger.logError(ex.getMessage(), ex);
                 }
 
-                if (fetchedUniqueIdString == null)
-                    return disconnectCheckFallback(service.getBadUuidDisconnectMessage(), FallbackUsage.ON_BAD_UUID_PATH);
-
-                placeholders.put("fetched-uuid", fetchedUniqueIdString);
-                placeholders.put("fetched-dashless-uuid", fetchedUniqueIdString.replace("-", ""));
-
-                handleResponse(ServiceStateEvent.FETCHED_UUID);
+                if (fetchedUniqueId == null)
+                    return disconnectCheckFallback(service.getBadUniqueIdDisconnectMessage(), FallbackUsage.ON_BAD_UUID_PATH);
 
                 try {
-                    fetchedUniqueId = Utils.toUniqueId(fetchedUniqueIdString);
-                } catch (Exception ex) {
+                    rewriteUniqueId = Utils.toUniqueId(fetchedUniqueId);
+
+                    placeholders.put("fetched-uuid", rewriteUniqueId.toString());
+                    placeholders.put("fetched-dashless-uuid", rewriteUniqueId.toString().replace("-", ""));
+
+                    handleResponse(ServiceStateEvent.FETCHED_UUID);
+                } catch (IllegalArgumentException ex) {
                     Utils.addExceptionPlaceholders(ex, placeholders);
                     if (sendErrorMessages)
-                        logger.logError(servicePrefix, "Failed to convert '%s' to UUID!", null, fetchedUniqueIdString.replaceAll("\\R+", ""));
+                        logger.logError(servicePrefix, "Failed to convert '%s' to UUID!", null, fetchedUniqueId.replaceAll("\\R+", ""));
                     if (sendDebugMessages)
                         logger.logError(ex.getMessage(), ex);
-                    return disconnectCheckFallback(service.getBadUuidDisconnectMessage(), FallbackUsage.ON_INVALID_UUID);
+                    return disconnectCheckFallback(service.getBadUniqueIdDisconnectMessage(), FallbackUsage.ON_INVALID_UUID);
                 }
             }
 
-            handleResponse(ServiceStateEvent.PRE_PROPERTIES_SERVICE_FETCH);
-            List<ProfilePropertyWrapper> properties = fetchProperties(responseBody);
-            if (properties != null)
-                handleResponse(ServiceStateEvent.FETCHED_PROPERTIES);
+            handleResponse(ServiceStateEvent.PRE_PROPERTIES_FETCH);
 
-            if (config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, fetchedUniqueId, properties, remoteAddress);
+            List<ProfilePropertyWrapper> properties = null;
+            if (applyProperties || requireProperties) {
+                properties = fetchProperties(responseBody);
+                if (properties != null)
+                    handleResponse(ServiceStateEvent.FETCHED_PROPERTIES);
+                else if (requireProperties)
+                    return disconnectCheckFallback(service.getBadPropertiesDisconnectMessage(), FallbackUsage.ON_BAD_PROPERTIES);
+            }
+
+            boolean cache = rewriteUniqueId == null;
+            if (cache)
+                rewriteUniqueId = uniqueId;
+
+            if (cache && config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
+                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties, remoteAddress);
                 if (cacheDatabase)
                     database.storeOnlinePlayerCache(fetchedPlayerData);
             } else {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, fetchedUniqueId, properties, null);
+                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties, null);
             }
 
-            if (sendMessages && fetchedUniqueId != null)
-                logger.logInfo(servicePrefix, "Unique ID successfully fetched for %s => %s (took %s/%sms)", username, fetchedUniqueId, took, timeoutCounter);
+            if (sendMessages && rewriteUniqueId != null)
+                logger.logInfo(servicePrefix, "Unique ID successfully fetched for %s => %s (took %s/%sms)", username, rewriteUniqueId, took, totalExecutionTime);
 
             if (cacheFetchedData)
                 fetchedPlayerDataMap.put(uniqueId, fetchedPlayerData);
             disconnect = false;
-            handleResponse(ServiceStateEvent.SERVICE_SUCCESS);
+            handleResponse(ServiceStateEvent.PLAYER_DATA_FETCHED);
             return false;
         } catch (Exception ex) {
             Utils.addExceptionPlaceholders(ex, placeholders);
