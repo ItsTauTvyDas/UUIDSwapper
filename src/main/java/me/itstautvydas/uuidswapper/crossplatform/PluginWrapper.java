@@ -25,12 +25,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -38,6 +38,7 @@ import java.util.function.Function;
 public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     private static final String CONFIGURATION_PREFIX = "Configuration";
     private static PluginWrapper<?, ?, ?, ?> CURRENT;
+    private static SimplifiedLogger CURRENT_LOGGER;
     public static final Gson GSON = new GsonBuilder()
             .setFieldNamingStrategy(f -> {
                 String fieldName = f.getName();
@@ -56,15 +57,16 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             .registerTypeAdapterFactory(new InvalidFieldsCollectorAdapterFactory())
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
             .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
+            .registerTypeAdapterFactory(new StrictEnumTypeAdapterFactory())
             .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
 
-    public static Object createPaperWrapperInstance(PlatformType type) throws Exception {
-        var paperLoaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase()
+    public static Object createWrapperInstance(PlatformType type) throws Exception {
+        var loaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase()
                 + ".crossplatform.wrapper."
                 + type.getName() + "PluginWrapper");
-        var constructor = paperLoaderClass.getConstructor();
+        var constructor = loaderClass.getConstructor();
         return constructor.newInstance();
     }
 
@@ -78,8 +80,10 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             implementation = switch (type) {
                 case VELOCITY -> (PluginWrapper<P, L, S, M>) new VelocityPluginWrapper();
                 case BUNGEE -> (PluginWrapper<P, L, S, M>) new BungeeCordPluginWrapper();
-                case PAPER, FOLIA -> (PluginWrapper<P, L, S, M>) createPaperWrapperInstance(type);
+                case PAPER, FOLIA -> (PluginWrapper<P, L, S, M>) createWrapperInstance(type);
             };
+            CURRENT = implementation;
+            CURRENT_LOGGER = implementation; // a workaround to get logger when CURRENT might be null
         } catch (Exception ex) {
             throw new RuntimeException("Failed to initialize " + type.getName() + "PluginWrapper!", ex);
         }
@@ -88,14 +92,40 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         implementation.logger = loggerObject;
         implementation.dataDirectory = dataDirectory;
         implementation.handle = plugin;
-        CURRENT = implementation;
         implementation.logInfo("CrossPlatform", "Initiated %s implementation.", type.getName());
         implementation.onInit();
     }
 
-    @NotNull
     public static PluginWrapper<?, ?, ?, ?> getCurrent() {
         return CURRENT;
+    }
+
+    public static boolean onPluginEnable() {
+        if (CURRENT_LOGGER == null) // Prevent from someone calling this twice
+            return false;
+        if (CURRENT != null) {
+            CURRENT_LOGGER = null;
+            CURRENT.onEnable();
+            return true;
+        }
+        if (ConfigurationErrorCollector.isSevere(GSON)) {
+            CURRENT_LOGGER.logError(
+                    CONFIGURATION_PREFIX,
+                    ConfigurationErrorCollector.ERROR_MESSAGE + " The plugin will not work.",
+                    null
+            );
+            CURRENT_LOGGER = null;
+        }
+        return false;
+    }
+
+    public static boolean onPluginDisable() {
+        if (CURRENT != null) {
+            CURRENT.onDisable();
+            CURRENT = null; // Prevent from someone calling this twice
+            return true;
+        }
+        return false;
     }
 
     @Getter
@@ -105,6 +135,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     protected S server;
     @Getter
     protected Path dataDirectory;
+    @Getter
+    protected Path driversDirectory;
 
     @Getter
     private Configuration configuration;
@@ -168,25 +200,25 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 //        return configuration;
 //    }
 
-    public <CC> BiObjectHolder<CC, JsonElement> loadConfiguration(Class<CC> configurationClass) throws Exception {
+    public void saveDefaultConfiguration() throws Exception {
         var configurationPath = getConfigurationPath();
         if (Files.notExists(configurationPath)) {
             try (InputStream in = getClass().getClassLoader().getResourceAsStream("configuration.json")) {
                 if (in == null)
                     throw new FileNotFoundException("configuration.json not found on classpath");
-                logInfo(CONFIGURATION_PREFIX, "Copying configuration file...");
+                logInfo(CONFIGURATION_PREFIX, "Copying default configuration file...");
                 Files.copy(in, configurationPath);
             }
         }
+    }
 
+    public static <CC> BiObjectHolder<CC, JsonElement> loadConfiguration(Path configurationPath, Class<CC> configurationClass) throws Exception {
         try (var reader = new FileReader(configurationPath.toFile())) {
             JsonElement root = JsonParser.parseReader(reader);
             CC configuration = null;
             if (configurationClass != null)
                 configuration = GSON.fromJson(root, configurationClass);
             return new BiObjectHolder<>(configuration, root);
-        } catch (JsonParseException e) {
-            throw new IOException("Invalid " + configurationPath.getFileName() + " format", e);
         }
     }
 
@@ -194,7 +226,10 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         try {
             reloadConfiguration();
         } catch (Exception ex) {
+            CURRENT = null;
             logError(CONFIGURATION_PREFIX, "Could not initialize configuration!", null);
+            if (ex instanceof RuntimeException)
+                throw (RuntimeException)ex; // Very silly workaround lol, I just don't like seeing "Caused by..." okay?
             throw new RuntimeException(ex);
         }
         database = new CacheDatabaseManager();
@@ -223,23 +258,20 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     }
 
     public void reloadConfiguration() throws Exception {
-        Files.createDirectories(dataDirectory);
-        Files.createDirectories(dataDirectory.resolve("drivers"));
+        driversDirectory = dataDirectory.resolve("drivers");
+        Files.createDirectories(driversDirectory); // also creates the main one
 
-        InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.put(GSON, new ArrayList<>());
-        var configurations = loadConfiguration((Class<Configuration>)null);
+        var start = System.nanoTime();
+        saveDefaultConfiguration();
+
+        var configurations = loadConfiguration(getConfigurationPath(), Configuration.class);
         configuration = configurations.getFirst();
         rawConfiguration = configurations.getSecond();
-        var invalidFields = InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.get(GSON);
+        ConfigurationErrorCollector.print(GSON, (message) -> logWarning(CONFIGURATION_PREFIX, message, null));
+        ConfigurationErrorCollector.throwIfAny(GSON, false);
 
         for (var service : configuration.getOnlineAuthentication().getServices())
             service.setDefaults(configuration.getOnlineAuthentication().getServiceDefaults());
-
-        if (invalidFields != null) {
-            for (var field : invalidFields)
-                logWarning(CONFIGURATION_PREFIX + "/Checker", "Unknown JSON field: " + field, null);
-        }
-        InvalidFieldsCollectorAdapterFactory.INVALID_FIELDS.remove(GSON);
 
         if (configuration.getPlayerRandomizer().isEnabled() &&
                 (configuration.getPlayerRandomizer().getUniqueIdSettings().isRandomize() ||
@@ -249,7 +281,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             playerRandomizer = null;
         }
 
-        logInfo(CONFIGURATION_PREFIX, "Configuration loaded.");
+        logInfo(CONFIGURATION_PREFIX, "Configuration loaded in %sms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         logInfo(CONFIGURATION_PREFIX, "Using online UUIDs => %s", configuration.getOnlineAuthentication().isEnabled());
 
         if (configuration.getSwappedUniqueIds().isEnabled()) {
@@ -279,7 +311,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             boolean cacheFetchedData,
             @Nullable Runnable switchToOfflineMode,
             @NotNull Consumer<Message> disconnectHandler) {
-        // I don't want to deal with nulls
+        // I don't want to deal with nulls, passing completed future with null inside
         var dummy = CompletableFuture.completedFuture((BiObjectHolder<OnlinePlayerData, Message>)null);
 
         if (playerRandomizer == null) {
@@ -499,6 +531,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     public void onReloadCommand(M messageAcceptor) {
         var placeholders = getCommandBasePlaceholders();
+        var old = configuration;
+        var old0 = rawConfiguration;
         try {
             PlayerDataFetcher.clearCache();
             reloadConfiguration();
@@ -510,9 +544,11 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             database.resetTimer();
             sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadSuccess, placeholders);
         } catch (Exception ex) {
+            configuration = old;
+            rawConfiguration = old0;
             placeholders.put("exception_message", ex.getMessage());
             Utils.printException(ex, x -> logWarning("ReloadCommand", "Failed to reload configuration!", ex));
-            sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFetcherBusy, placeholders);
+            sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFailed, placeholders);
         }
     }
 
