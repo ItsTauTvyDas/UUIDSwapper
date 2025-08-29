@@ -1,7 +1,6 @@
 package me.itstautvydas.uuidswapper.json;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonParseException;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
 import com.google.gson.reflect.TypeToken;
@@ -10,7 +9,6 @@ import com.google.gson.stream.JsonWriter;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 
 import java.io.IOException;
-import java.util.HashSet;
 
 public class RequiredPropertyAdapterFactory implements TypeAdapterFactory {
     @Override
@@ -27,26 +25,29 @@ public class RequiredPropertyAdapterFactory implements TypeAdapterFactory {
             public T read(JsonReader in) throws IOException {
                 var obj = delegate.read(in);
                 if (obj != null)
-                    validateRequiredProperties(obj);
+                    validateRequiredProperties(obj, in);
                 return obj;
             }
 
-            private void validateRequiredProperties(T obj) {
-                var missingFields = new HashSet<String>();
+            private void validateRequiredProperties(T obj, JsonReader in) {
                 for (var field : obj.getClass().getDeclaredFields()) {
                     if (field.isAnnotationPresent(RequiredProperty.class)) {
                         field.setAccessible(true);
                         try {
                             var value = field.get(obj);
                             if (value == null)
-                                missingFields.add(field.getName());
+                                ConfigurationErrorCollector.collect(
+                                        gson,
+                                        ConfigurationErrorCollector.MISSING_PROPERTY,
+                                        field.getName(),
+                                        in,
+                                        true
+                                );
                         } catch (IllegalAccessException e) {
                             throw new RuntimeException(e);
                         }
                     }
                 }
-                if (!missingFields.isEmpty())
-                    throw new JsonParseException("Missing required properties: " + String.join(", ", missingFields));
             }
         };
     }
