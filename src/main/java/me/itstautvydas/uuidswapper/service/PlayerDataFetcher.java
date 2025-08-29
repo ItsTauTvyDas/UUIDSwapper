@@ -60,7 +60,6 @@ public class PlayerDataFetcher {
     private String servicePrefix;
     private boolean applyProperties = true;
     private boolean requireProperties;
-    private UUID rewriteUniqueId;
 
     public PlayerDataFetcher(String username, UUID uniqueId, String remoteAddress, SimplifiedLogger logger,
                              boolean cacheFetchedData, boolean cacheDatabase, boolean forceErrorMessages) {
@@ -72,7 +71,6 @@ public class PlayerDataFetcher {
         this.cacheFetchedData = cacheFetchedData;
         this.cacheDatabase = cacheDatabase;
         this.forceErrorMessages = forceErrorMessages;
-        this.requireProperties = service.isRequireProperties();
         updateMessages();
     }
 
@@ -253,6 +251,7 @@ public class PlayerDataFetcher {
         servicePrefix = getPrefix(name);
         updateMessages();
         disconnectNoThrow(null);
+        requireProperties = service.isRequireProperties();
     }
 
     public boolean isFallback() {
@@ -286,6 +285,13 @@ public class PlayerDataFetcher {
         sendDebugMessages = service != null && service.isDebugEnabled();
         sendMessages = config.isSendMessagesToConsole() || sendDebugMessages || forceErrorMessages;
         sendErrorMessages = config.isSendErrorMessagesToConsole() || sendDebugMessages || forceErrorMessages;
+    }
+
+    private void updateTotalExecutionTime() {
+        placeholders.put("total-execution-time", totalExecutionTime);
+        placeholders.put("total-took", totalExecutionTime);
+        placeholders.put("total-execution-time-left", config.getMaxTimeout() - totalExecutionTime);
+        placeholders.put("total-took-left", config.getMaxTimeout() - totalExecutionTime);
     }
 
     private HttpRequest buildRequest(Configuration.ServiceConfiguration service, String prefix) {
@@ -403,16 +409,22 @@ public class PlayerDataFetcher {
                         logger.logError(prefix,
                                 "Not enough time-out for sending this request! reached timeout %sms, min timeout %sms",
                                 null, totalExecutionTime, config.getMinTimeout());
-                    break;
+                    if (!disconnectCheckFallback(propertyService.getTimeoutDisconnectMessage(),
+                            FallbackUsage.ON_SUB_SERVICE_TIMEOUT))
+                        break;
                 }
                 var took = new ObjectHolder<Long>(null);
                 var result = sendRequest(request, took);
                 fetchTook = took.get();
 
+                placeholders.put("sub-execution-time", fetchTook);
+                placeholders.put("sub-took-time", fetchTook);
+
                 if (sendDebugMessages)
                     logger.logInfo(prefix, "(Debug) Took %sms to fetch data.", fetchTook);
 
                 totalExecutionTime += fetchTook;
+                updateTotalExecutionTime();
 
                 if (result.getException() != null) {
                     Utils.addExceptionPlaceholders(result.getException(), placeholders);
@@ -461,11 +473,11 @@ public class PlayerDataFetcher {
                         }
                     } catch (Exception ex) {
                         if (sendErrorMessages)
-                            logger.logError(prefix, "Failed to fetch profile's properties!", sendDebugMessages ? ex : null);
+                            logger.logError(prefix, "Failed to get profile's properties! (Invalid properties?)", sendDebugMessages ? ex : null);
                     }
                 } else {
                     if (sendErrorMessages)
-                        logger.logError(prefix, "JSON path to UUID is not defined!", null);
+                        logger.logError(prefix, "JSON path to properties is not defined!", null);
                 }
             }
         }
@@ -473,7 +485,7 @@ public class PlayerDataFetcher {
         if (properties == null && sendErrorMessages)
             logger.logWarning(servicePrefix, "Failed to retrieve properties (even if fallbacks were used)", null);
         if (properties != null && sendMessages)
-            logger.logInfo(prefix, "Properties successfully fetched for %s (took %s/%sms", username, fetchTook, config.getMaxTimeout());
+            logger.logInfo(prefix, "Properties successfully fetched for %s (took %s/%sms)", username, fetchTook, config.getMaxTimeout());
         return properties;
     }
 
@@ -521,10 +533,9 @@ public class PlayerDataFetcher {
             placeholders.put("http.status", response.statusCode());
             placeholders.put("execution-time", took.get());
             placeholders.put("took", took.get());
-            placeholders.put("total-execution-time", totalExecutionTime);
-            placeholders.put("total-took", totalExecutionTime);
-            placeholders.put("total-execution-time-left", config.getMaxTimeout() - totalExecutionTime);
-            placeholders.put("total-took-left", config.getMaxTimeout() - totalExecutionTime);
+            updateTotalExecutionTime();
+
+            handleResponse(ServiceStateEvent.POST_REQUEST);
 
             if (sendDebugMessages)
                 logger.logInfo(servicePrefix, "(Debug) Took %sms to fetch data.", took.get());
@@ -540,6 +551,11 @@ public class PlayerDataFetcher {
                 return disconnectCheckFallback(message, FallbackUsage.ON_BAD_STATUS);
             }
 
+            for (var entry : response.headers().map().entrySet())
+                placeholders.put("http.header.str" + entry.getKey().toLowerCase(), String.join(",", entry.getValue()));
+            for (var entry : response.headers().map().entrySet())
+                placeholders.put("http.header.raw" + entry.getKey().toLowerCase(), entry.getValue());
+
             Object responseBody;
             try {
                 responseBody = JsonParser.parseString(response.body());
@@ -550,19 +566,12 @@ public class PlayerDataFetcher {
                             responseBody.toString().replaceAll("\\R+", ""));
             }
 
-            for (var entry : response.headers().map().entrySet())
-                placeholders.put("http.header.str" + entry.getKey().toLowerCase(), String.join(",", entry.getValue()));
-            for (var entry : response.headers().map().entrySet())
-                placeholders.put("http.header.raw" + entry.getKey().toLowerCase(), entry.getValue());
-
             if (responseBody instanceof JsonElement element)
                 placeholders.putAll(Utils.extractJsonPaths("response.", element));
             else
                 placeholders.put("response", responseBody.toString());
 
-            handleResponse(ServiceStateEvent.POST_REQUEST);
-
-            rewriteUniqueId = null;
+            UUID rewriteUniqueId = null;
             if (service.getJsonPathToUuid() != null) {
                 String fetchedUniqueId = null;
                 try {
@@ -621,7 +630,7 @@ public class PlayerDataFetcher {
                 fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties, null);
             }
 
-            if (sendMessages && rewriteUniqueId != null)
+            if (sendMessages && !rewriteUniqueId.equals(uniqueId))
                 logger.logInfo(servicePrefix, "Unique ID successfully fetched for %s => %s (took %s/%sms)", username, rewriteUniqueId, took, totalExecutionTime);
 
             if (cacheFetchedData)
