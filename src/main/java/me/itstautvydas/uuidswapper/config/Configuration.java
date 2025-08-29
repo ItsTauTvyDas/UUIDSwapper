@@ -2,6 +2,7 @@ package me.itstautvydas.uuidswapper.config;
 
 import com.google.gson.JsonObject;
 import com.google.gson.annotations.SerializedName;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.ToString;
 import me.itstautvydas.uuidswapper.Utils;
@@ -12,6 +13,7 @@ import me.itstautvydas.uuidswapper.enums.ConsoleMessageType;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
 import me.itstautvydas.uuidswapper.enums.ServiceStateEvent;
 import me.itstautvydas.uuidswapper.interfaces.PostProcessable;
+import me.itstautvydas.uuidswapper.service.RateLimitable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -62,9 +64,9 @@ public class Configuration {
         @RequiredProperty
         private ServiceStateEvent event;
         private Boolean allowPlayerToJoin;
-        private Boolean applyProperties;
+        private boolean applyProperties = true;
+        private Boolean requireProperties;
         private String disconnectMessage;
-        private String fetchProperties;
         private String messageToConsole;
         private ConsoleMessageType consoleMessageType;
 
@@ -145,26 +147,34 @@ public class Configuration {
                 json.addProperty("allowPlayerToJoin", allowPlayerToJoin);
             if (allowPlayerToJoin != null)
                 json.addProperty("useFallback", allowPlayerToJoin);
-            if (applyProperties != null)
-                json.addProperty("applyProperties", applyProperties);
+            if (applyProperties)
+                json.addProperty("applyProperties", true);
             return Utils.DEFAULT_GSON.toJson(json);
         }
     }
 
     @ToString
     @Getter
-    public static class DefaultServiceConfiguration {
+    public static class DefaultServiceConfiguration extends RateLimitable {
         protected String requestMethod;
-        protected String badUuidDisconnectMessage;
+        protected String badUniqueIdDisconnectMessage;
         protected String defaultDisconnectMessage;
         protected String connectionErrorDisconnectMessage;
-        protected String serviceBadStatusDisconnectMessage;
+        protected String badStatusDisconnectMessage;
         protected String unknownErrorDisconnectMessage;
-        protected String serviceTimeoutDisconnectMessage;
+        protected String timeoutDisconnectMessage;
+        protected String rateLimitedDisconnectMessage;
+        protected String badPropertiesDisconnectMessage;
+        protected Integer maxRequestsPerMinute;
         protected Integer expectStatusCode;
         protected Long timeout;
+        @Getter(AccessLevel.NONE)
         protected Boolean allowCaching;
-        @SerializedName("debug")
+        @Getter(AccessLevel.NONE)
+        protected Boolean requireProperties;
+        protected Map<String, Object> customPlaceholders;
+        protected Map<String, Object> customStatusCodeDisconnectMessages;
+        @SerializedName("debug") @Getter(AccessLevel.NONE)
         protected Boolean debugEnabled;
         protected LinkedHashSet<FallbackUsage> useFallbacks;
         protected Map<String, String> postData;
@@ -181,6 +191,10 @@ public class Configuration {
 
         public boolean isAllowCaching() {
             return Boolean.TRUE.equals(allowCaching);
+        }
+
+        public boolean isRequireProperties() {
+            return Boolean.TRUE.equals(requireProperties);
         }
     }
 
@@ -199,20 +213,39 @@ public class Configuration {
 
         public void setDefaults(DefaultServiceConfiguration service) {
             this.requestMethod = defaultValue(requestMethod, service.getRequestMethod(), "GET");
-            this.badUuidDisconnectMessage = defaultValue(badUuidDisconnectMessage, service.getBadUuidDisconnectMessage(), null);
-            this.defaultDisconnectMessage = defaultValue(defaultDisconnectMessage, service.getDefaultDisconnectMessage(), null);
-            this.connectionErrorDisconnectMessage = defaultValue(connectionErrorDisconnectMessage, service.getConnectionErrorDisconnectMessage(), null);
-            this.serviceBadStatusDisconnectMessage = defaultValue(serviceBadStatusDisconnectMessage, service.getServiceBadStatusDisconnectMessage(), null);
-            this.unknownErrorDisconnectMessage = defaultValue(unknownErrorDisconnectMessage, service.getUnknownErrorDisconnectMessage(), null);
-            this.serviceTimeoutDisconnectMessage = defaultValue(serviceTimeoutDisconnectMessage, service.getServiceTimeoutDisconnectMessage(), null);
+            this.badUniqueIdDisconnectMessage = defaultValue(badUniqueIdDisconnectMessage, service.badUniqueIdDisconnectMessage, null);
+            this.defaultDisconnectMessage = defaultValue(defaultDisconnectMessage, service.defaultDisconnectMessage, null);
+            this.connectionErrorDisconnectMessage = defaultValue(connectionErrorDisconnectMessage, service.connectionErrorDisconnectMessage, null);
+            this.badStatusDisconnectMessage = defaultValue(badStatusDisconnectMessage, service.badStatusDisconnectMessage, null);
+            this.unknownErrorDisconnectMessage = defaultValue(unknownErrorDisconnectMessage, service.unknownErrorDisconnectMessage, null);
+            this.timeoutDisconnectMessage = defaultValue(timeoutDisconnectMessage, service.timeoutDisconnectMessage, null);
+            this.rateLimitedDisconnectMessage = defaultValue(rateLimitedDisconnectMessage, service.rateLimitedDisconnectMessage, null);
+            this.badPropertiesDisconnectMessage = defaultValue(badPropertiesDisconnectMessage, service.badPropertiesDisconnectMessage, null);
             this.expectStatusCode = defaultValue(expectStatusCode, service.expectStatusCode, 200);
             this.timeout = defaultValue(timeout, service.timeout, 3000L);
             this.allowCaching = defaultValue(allowCaching, service.allowCaching, true);
+            this.requireProperties = defaultValue(requireProperties, service.requireProperties, false);
             this.debugEnabled = defaultValue(debugEnabled, service.debugEnabled, false);
-            this.useFallbacks = defaultValue(useFallbacks, service.getUseFallbacks(), new LinkedHashSet<>());
-            this.postData = defaultValue(postData, service.getPostData(), new HashMap<>());
-            this.queryData = defaultValue(queryData, service.getQueryData(), new HashMap<>());
-            this.headers = defaultValue(headers, service.getHeaders(), new HashMap<>());
+            this.useFallbacks = defaultValue(useFallbacks, service.useFallbacks, new LinkedHashSet<>());
+            this.postData = defaultValue(postData, service.postData, new HashMap<>());
+            this.queryData = defaultValue(queryData, service.queryData, new HashMap<>());
+            this.headers = defaultValue(headers, service.headers, new HashMap<>());
+            this.maxRequestsPerMinute = defaultValue(maxRequestsPerMinute, service.maxRequestsPerMinute, null);
+            this.customPlaceholders = combineMap(customPlaceholders, service.customPlaceholders);
+            this.customStatusCodeDisconnectMessages = combineMap(customStatusCodeDisconnectMessages, service.customStatusCodeDisconnectMessages);
+        }
+
+        private Map<String, Object> combineMap(Map<String, Object> current, Map<String, Object> defaultMap) {
+            if (current == null && defaultMap == null)
+                return new HashMap<>();
+            return new HashMap<>() {
+                {
+                    if (current != null)
+                        putAll(current);
+                    if (defaultMap != null)
+                        putAll(defaultMap);
+                }
+            };
         }
 
         private <T> T defaultValue(T current, T defaultValue, T defaultValueIfFail) {
@@ -232,11 +265,7 @@ public class Configuration {
             return null;
         }
 
-        public boolean isForProperties() {
-            return jsonPathToUuid == null && canRetrieveProperties();
-        }
-
-        public boolean isForUniqueId() {
+        public boolean canRetrieveUniqueId() {
             return jsonPathToUuid != null;
         }
 
@@ -344,8 +373,6 @@ public class Configuration {
         private String reloadSuccess;
         @RequiredProperty
         private String reloadDatabaseDriverFailed;
-        @RequiredProperty
-        private String reloadFetcherBusy;
         @RequiredProperty
         private String reloadFailed;
         @RequiredProperty

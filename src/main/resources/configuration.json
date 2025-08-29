@@ -2,6 +2,9 @@
   "paper": {
     "use-mini-messages": false
   },
+  "proxy-and-backend": {
+    "communicate": true
+  },
   "database": {
     "enabled": false,
     "download-driver": true,
@@ -32,12 +35,20 @@
     },
     "service-defaults": {
       "expect-status-code": 200,
-      "default-disconnect-message": "&cFailed to get your online UUID",
-      "bad-uuid-disconnect-message": "&cFailed to get your online UUID (bad UUID), contact server's administrator!",
-      "connection-error-disconnect-message": "&cFailed to get your online UUID (connection error), contact server's administrator!",
-      "service-bad-status-disconnect-message": "&cFailed to get your online UUID (service returned {http.status}), contact server's administrator!",
-      "unknown-error-disconnect-message": "&cFailed to get your online UUID (unknown error), contact server's administrator!",
-      "service-timeout-disconnect-message": "&cFailed to get your online UUID (service timed out), try again later!",
+      "custom-placeholders": {
+        "failed": "Failed to get your online profile",
+        "contact": "contact server's administrator!",
+        "try-again": "try again later!"
+      },
+      "default-disconnect-message": "&c{custom.failed}",
+      "bad-uuid-disconnect-message": "&c{custom.failed} (bad unique ID), {custom.contact}",
+      "connection-error-disconnect-message": "&c{custom.failed} (connection error), {custom.contact}",
+      "bad-status-disconnect-message": "&c{custom.failed} (service returned {http.status}), {custom.contact}",
+      "unknown-error-disconnect-message": "&c{custom.failed} (unknown error), {custom.contact}",
+      "timeout-disconnect-message": "&c{custom.failed} (service timed out), {custom.try-again}",
+      "rate-limited-disconnect-message": "&c{custom.failed} (service rate limited), {custom.try-again}",
+      "properties-failed-disconnect-message": "&c{custom.failed} (bad properties), {custom.try-again}",
+      "custom-status-code-disconnect-messages": {},
       "timeout": 3000,
       "debug": false,
       "allow-caching": true,
@@ -46,7 +57,11 @@
         "ON_INVALID_UUID",
         "ON_BAD_UUID_PATH",
         "ON_UNKNOWN_ERROR",
-        "ON_BAD_STATUS"
+        "ON_BAD_STATUS",
+        "ON_BAD_PROPERTIES",
+        "ON_SERVICE_RATE_LIMITED",
+        "ON_SUB_SERVICE_RATE_LIMITED",
+        "ON_SERVICE_TIMEOUT"
       ],
       "headers": {
         "Accept": "application/json"
@@ -61,9 +76,10 @@
         "json-path-to-uuid": "data.player.id",
         "json-path-to-properties": "data.player.properties",
         "ignore-status-code": true,
+        "dfsdfd": "",
         "response-handlers": [
           {
-            "state": "AFTER_REQUEST",
+            "event": "POST_REQUEST",
             "allow-player-to-join": true,
             "conditions": {
               "response.code": "minecraft.invalid_username"
@@ -77,15 +93,17 @@
         "json-path-to-uuid": "id",
         "ignore-status-code": true,
         "request-services-for-properties": ["MojangSessionServer"],
+        "require-properties": true,
         "response-handlers": [
           {
-            "state": "AFTER_REQUEST",
+            "event": "POST_REQUEST",
             "allow-player-to-join": true,
             "conditions": {
               "::response.errorMessage": true
             }
           }
-        ]
+        ],
+        "max-requests-per-minute": 60
       },
       {
         "name": "MojangSessionServer",
@@ -93,6 +111,7 @@
         "query-data": {
           "unsigned": false
         },
+        "max-requests-per-minute": 60,
         "json-path-to-properties": "properties"
       }
     ]
@@ -112,35 +131,21 @@
     "unique-id": {
       "randomize": true,
       "save": false
-    },
-    "skin": {
-      "randomize": true,
-      "skin-pack-txt-path": "skin-packs/random.txt"
     }
   },
   "swapped-unique-ids": {
     "enabled": false,
-    "map": {
+    "swap": {
       "u:Notch": "00000000-0000-0000-0000-000000000000",
       "00000000-0000-0000-0000-000000000000": "00000000-0000-0000-0000-000000000001"
     }
   },
   "swapped-player-names": {
     "enabled": false,
-    "map": {
+    "swap": {
       "u:Notch": "Herobrine",
       "00000000-0000-0000-0000-000000000000": "jeb_"
     }
-  },
-  "custom-players-skin": {
-    "enabled": false,
-    "map": {
-      "u:Notch": ""
-    }
-  },
-  "internals": {
-    "match-username-and-unique-id-in-properties": true,
-    "remove-property-signature-for-custom-skins": true
   },
   "command-messages": {
     "prefix": "&b[UUIDSwapper] &r",
@@ -158,8 +163,11 @@
     ],
     "reload-success": "{prefix}&aPlugin successfully reloaded!",
     "reload-database-driver-failed": "{prefix}&rFailed to load {driver} driver from configuration!",
-    "reload-fetcher-busy": "{prefix}&cPlayerDataFetched is busy, configuration cannot be reloaded!",
-    "reload-failed": "{prefix}&cFailed to reload configuration, check console for full error - {exception_message}",
+    "reload-failed": [
+      "{prefix}&cFailed to reload configuration, check console for full error!",
+      "{prefix}  Error: &4{exception_message}",
+      "{prefix} &fOld configuration reverted."
+    ],
     "player-pretend-success": [
       "{prefix}Your player data was changed:",
       "{prefix}  New username -> &a{new_username}",
