@@ -25,13 +25,16 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        PluginWrapper.getCurrent().onEnable();
-        Bukkit.getPluginManager().registerEvents(this, this);
+        if (PluginWrapper.onPluginEnable()) {
+            Bukkit.getPluginManager().registerEvents(this, this);
+        } else {
+            getServer().getPluginManager().disablePlugin(this);
+        }
     }
 
     @Override
     public void onDisable() {
-        PluginWrapper.getCurrent().onDisable();
+        PluginWrapper.onPluginDisable();
     }
 
     @EventHandler

@@ -28,8 +28,13 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
 
     @Override
     public void onEnable() {
-        PluginWrapper.getCurrent().onEnable();
-        getProxy().getPluginManager().registerListener(this, this);
+        if (PluginWrapper.onPluginEnable())
+            getProxy().getPluginManager().registerListener(this, this);
+    }
+
+    @Override
+    public void onDisable() {
+        PluginWrapper.onPluginDisable();
     }
 
     @EventHandler

@@ -39,12 +39,12 @@ public class UUIDSwapperVelocity {
 
     @Subscribe
     public void handleProxyInitialization(ProxyInitializeEvent event) {
-        PluginWrapper.getCurrent().onEnable();
+        PluginWrapper.onPluginEnable();
     }
 
     @Subscribe
-    public EventTask handleProxyShutdown(ProxyShutdownEvent event) {
-        return EventTask.async(PluginWrapper.getCurrent()::onDisable);
+    public void handleProxyShutdown(ProxyShutdownEvent event) {
+        PluginWrapper.onPluginDisable();
     }
 
     @Subscribe
