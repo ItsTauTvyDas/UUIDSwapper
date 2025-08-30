@@ -2,7 +2,6 @@ package me.itstautvydas.uuidswapper.json;
 
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
-import lombok.Getter;
 import me.itstautvydas.uuidswapper.exception.ConfigurationException;
 
 import java.util.*;
@@ -11,7 +10,7 @@ import java.util.function.Consumer;
 public class ConfigurationErrorCollector extends HashSet<String> {
     public static final String INVALID_ENUM = "Invalid enum value";
     public static final String MISSING_PROPERTY = "Missing required property";
-    public static final String INVALID_PROPERTY = "Invalid property";
+    public static final String UNKNOWN_PROPERTY = "Invalid property";
     public static final String ERROR_MESSAGE = "Failed to correctly parse configuration!";
 
     private static final Map<Gson, ConfigurationErrorCollector> map = new HashMap<>();
@@ -25,8 +24,8 @@ public class ConfigurationErrorCollector extends HashSet<String> {
         list.add(message);
     }
 
-    public static void collect(Gson gson, String message, Object value, JsonReader reader, boolean severeError) {
-        collect(gson, String.format("%s %s at %s", message, value, reader.getPath()), severeError);
+    public static void collect(Gson gson, String message, Object key, JsonReader reader, boolean severeError) {
+        collect(gson, String.format("%s %s at %s", message, key, reader.getPath()), severeError);
     }
 
     public static void throwIfAny(Gson gson, boolean remove) {
