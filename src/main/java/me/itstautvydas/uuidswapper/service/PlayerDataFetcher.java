@@ -271,14 +271,12 @@ public class PlayerDataFetcher {
     // false - break
     // true - continue
     private boolean disconnectCheckFallback(String message, FallbackUsage fallbackUsage) throws BreakContinuationException {
-        var useFallback = service.getUseFallbacks().contains(fallbackUsage);
-        // TODO
-        if (fallbackUsage != FallbackUsage.ON_SUB_SERVICE_RATE_LIMITED) {
-            disconnectNoThrow(message);
-            if (useFallback)
-                handleResponse(ServiceStateEvent.PRE_FALLBACK_USE);
+        disconnectNoThrow(message); // always set the disconenct message as the latest one
+        if (service.getUseFallbacks().contains(fallbackUsage)) {
+            handleResponse(ServiceStateEvent.PRE_FALLBACK_USE);
+            return true;
         }
-        return useFallback;
+        return false;
     }
 
     private void updateMessages() {
@@ -295,6 +293,13 @@ public class PlayerDataFetcher {
     }
 
     private HttpRequest buildRequest(Configuration.ServiceConfiguration service, String prefix) {
+        var timeout = config.getMaxTimeout() - totalExecutionTime;
+        if (timeout <= config.getMinTimeout()) {
+            if (sendErrorMessages)
+                logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
+            return null;
+        }
+
         String queryString = Utils.replacePlaceholders(Utils.buildDataString(service.getQueryData()), placeholders);
         String endpoint = Utils.replacePlaceholders(service.getEndpoint(), placeholders);
 
@@ -317,13 +322,6 @@ public class PlayerDataFetcher {
                     Utils.replacePlaceholders(header.getKey(), placeholders),
                     Utils.replacePlaceholders(header.getValue(), placeholders)
             );
-
-        var timeout = config.getMaxTimeout() - totalExecutionTime;
-        if (timeout <= config.getMinTimeout()) {
-            if (sendErrorMessages)
-                logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
-            return null;
-        }
 
         builder.timeout(Duration.ofMillis(Math.min(timeout, service.getTimeout())));
         return builder.build();
@@ -505,8 +503,7 @@ public class PlayerDataFetcher {
         try {
             HttpRequest request = buildRequest(service, servicePrefix);
             if (request == null)
-                return disconnectCheckFallback(service.getTimeoutDisconnectMessage(), FallbackUsage.ON_SERVICE_TIMEOUT);
-//                disconnect(service.getTimeoutDisconnectMessage());
+                disconnect(service.getTimeoutDisconnectMessage());
 
             handleResponse(ServiceStateEvent.PRE_REQUEST);
 
