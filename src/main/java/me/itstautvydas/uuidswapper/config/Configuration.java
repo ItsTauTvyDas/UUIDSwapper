@@ -164,7 +164,7 @@ public class Configuration {
         protected String unknownErrorDisconnectMessage;
         protected String timeoutDisconnectMessage;
         protected String rateLimitedDisconnectMessage;
-        protected String badPropertiesDisconnectMessage;
+        protected String propertiesFailedDisconnectMessage;
         protected Integer maxRequestsPerMinute;
         protected Integer expectStatusCode;
         protected Long timeout;
@@ -220,7 +220,7 @@ public class Configuration {
             this.unknownErrorDisconnectMessage = defaultValue(unknownErrorDisconnectMessage, service.unknownErrorDisconnectMessage, null);
             this.timeoutDisconnectMessage = defaultValue(timeoutDisconnectMessage, service.timeoutDisconnectMessage, null);
             this.rateLimitedDisconnectMessage = defaultValue(rateLimitedDisconnectMessage, service.rateLimitedDisconnectMessage, null);
-            this.badPropertiesDisconnectMessage = defaultValue(badPropertiesDisconnectMessage, service.badPropertiesDisconnectMessage, null);
+            this.propertiesFailedDisconnectMessage = defaultValue(propertiesFailedDisconnectMessage, service.propertiesFailedDisconnectMessage, null);
             this.expectStatusCode = defaultValue(expectStatusCode, service.expectStatusCode, 200);
             this.timeout = defaultValue(timeout, service.timeout, 3000L);
             this.allowCaching = defaultValue(allowCaching, service.allowCaching, true);

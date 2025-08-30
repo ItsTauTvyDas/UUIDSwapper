@@ -612,7 +612,7 @@ public class PlayerDataFetcher {
                 if (properties != null)
                     handleResponse(ServiceStateEvent.FETCHED_PROPERTIES);
                 else if (requireProperties)
-                    return disconnectCheckFallback(service.getBadPropertiesDisconnectMessage(), FallbackUsage.ON_BAD_PROPERTIES);
+                    return disconnectCheckFallback(service.getPropertiesFailedDisconnectMessage(), FallbackUsage.ON_BAD_PROPERTIES);
             }
 
             boolean cache = rewriteUniqueId == null;

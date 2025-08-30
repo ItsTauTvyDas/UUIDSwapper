@@ -2,9 +2,6 @@
   "paper": {
     "use-mini-messages": false
   },
-  "proxy-and-backend": {
-    "communicate": true
-  },
   "database": {
     "enabled": false,
     "download-driver": true,
@@ -41,7 +38,7 @@
         "try-again": "try again later!"
       },
       "default-disconnect-message": "&c{custom.failed}",
-      "bad-uuid-disconnect-message": "&c{custom.failed} (bad unique ID), {custom.contact}",
+      "bad-unique-id-disconnect-message": "&c{custom.failed} (bad unique ID), {custom.contact}",
       "connection-error-disconnect-message": "&c{custom.failed} (connection error), {custom.contact}",
       "bad-status-disconnect-message": "&c{custom.failed} (service returned {http.status}), {custom.contact}",
       "unknown-error-disconnect-message": "&c{custom.failed} (unknown error), {custom.contact}",
@@ -76,8 +73,7 @@
         "endpoint": "https://playerdb.co/api/player/minecraft/{username}",
         "json-path-to-uuid": "data.player.id",
         "json-path-to-properties": "data.player.properties",
-        "ignore-status-code": true,
-        "dfsdfd": "",
+        "expect-status-code": null,
         "response-handlers": [
           {
             "event": "POST_REQUEST",
@@ -92,7 +88,7 @@
         "name": "MojangAPI",
         "endpoint": "https://api.mojang.com/users/profiles/minecraft/{username}",
         "json-path-to-uuid": "id",
-        "ignore-status-code": true,
+        "expect-status-code": null,
         "request-services-for-properties": ["MojangSessionServer"],
         "require-properties": true,
         "response-handlers": [
