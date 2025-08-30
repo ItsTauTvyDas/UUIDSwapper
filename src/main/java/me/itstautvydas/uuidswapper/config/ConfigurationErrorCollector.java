@@ -1,4 +1,4 @@
-package me.itstautvydas.uuidswapper.json;
+package me.itstautvydas.uuidswapper.config;
 
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
@@ -11,7 +11,7 @@ public class ConfigurationErrorCollector extends HashSet<String> {
     public static final String INVALID_ENUM = "Invalid enum value";
     public static final String MISSING_PROPERTY = "Missing required property";
     public static final String UNKNOWN_PROPERTY = "Invalid property";
-    public static final String ERROR_MESSAGE = "Failed to correctly parse configuration!";
+    public static final String ERROR_MESSAGE = "Failed to correctly parse the configuration!";
 
     private static final Map<Gson, ConfigurationErrorCollector> map = new HashMap<>();
 
@@ -49,10 +49,6 @@ public class ConfigurationErrorCollector extends HashSet<String> {
         if (list != null)
             return list.severe;
         return false;
-    }
-
-    public static Set<String> clear(Gson gson) {
-        return map.remove(gson);
     }
 
     private boolean severe;

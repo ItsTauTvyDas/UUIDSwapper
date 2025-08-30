@@ -7,6 +7,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
+import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
 
 import java.io.IOException;
 

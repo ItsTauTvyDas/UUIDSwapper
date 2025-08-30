@@ -6,6 +6,7 @@ import com.google.gson.TypeAdapterFactory;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
 
 import java.io.IOException;
 import java.io.StringReader;

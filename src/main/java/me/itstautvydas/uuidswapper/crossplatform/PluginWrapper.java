@@ -6,6 +6,7 @@ import lombok.Getter;
 import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
+import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
 import me.itstautvydas.uuidswapper.crossplatform.wrapper.BungeeCordPluginWrapper;
 import me.itstautvydas.uuidswapper.crossplatform.wrapper.VelocityPluginWrapper;
 import me.itstautvydas.uuidswapper.data.Message;
@@ -548,7 +549,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             configuration = old;
             rawConfiguration = old0;
             placeholders.put("exception_message", ex.getMessage());
-            Utils.printException(ex, x -> logWarning("ReloadCommand", "Failed to reload configuration!", ex));
+            Utils.printException(ex, x -> logWarning("ReloadCommand", "Failed to reload the configuration!", ex));
             sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFailed, placeholders);
         }
     }
