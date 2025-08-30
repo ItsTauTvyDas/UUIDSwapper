@@ -61,7 +61,8 @@
         "ON_BAD_PROPERTIES",
         "ON_SERVICE_RATE_LIMITED",
         "ON_SUB_SERVICE_RATE_LIMITED",
-        "ON_SERVICE_TIMEOUT"
+        "ON_SERVICE_TIMEOUT",
+        "ON_SUB_SERVICE_TIMEOUT"
       ],
       "headers": {
         "Accept": "application/json"
