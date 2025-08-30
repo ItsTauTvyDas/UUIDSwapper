@@ -26,7 +26,9 @@ public class Utils {
 
     public final String GENERIC_DISCONNECT_MESSAGE_ID = "multiplayer.disconnect.generic";
 
-    public final Gson DEFAULT_GSON = new GsonBuilder().create();
+    public final Gson DEFAULT_GSON = new GsonBuilder()
+            .disableHtmlEscaping()
+            .create();
 
     public boolean isRunningFolia() {
         try {
