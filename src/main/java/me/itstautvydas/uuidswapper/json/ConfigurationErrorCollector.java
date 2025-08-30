@@ -28,10 +28,13 @@ public class ConfigurationErrorCollector extends HashSet<String> {
         collect(gson, String.format("%s %s at %s", message, key, reader.getPath()), severeError);
     }
 
-    public static void throwIfAny(Gson gson, boolean remove) {
-        var list = remove ? map.remove(gson) : map.get(gson);
-        if (list != null && !list.isEmpty())
-            throw new ConfigurationException(ERROR_MESSAGE);
+    public static void throwIfAnySevereErrors(Gson gson) {
+        var list = map.get(gson);
+        if (list != null && !list.isEmpty()) {
+            if (list.severe)
+                throw new ConfigurationException(ERROR_MESSAGE);
+            map.remove(gson);
+        }
     }
 
     public static void print(Gson gson, Consumer<String> printAcceptor) {

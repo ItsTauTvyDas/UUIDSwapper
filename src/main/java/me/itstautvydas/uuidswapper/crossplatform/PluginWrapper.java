@@ -269,7 +269,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         configuration = configurations.getFirst();
         rawConfiguration = configurations.getSecond();
         ConfigurationErrorCollector.print(GSON, (message) -> logWarning(CONFIGURATION_PREFIX, message, null));
-        ConfigurationErrorCollector.throwIfAny(GSON, false);
+        ConfigurationErrorCollector.throwIfAnySevereErrors(GSON);
 
         for (var service : configuration.getOnlineAuthentication().getServices())
             service.setDefaults(configuration.getOnlineAuthentication().getServiceDefaults());
