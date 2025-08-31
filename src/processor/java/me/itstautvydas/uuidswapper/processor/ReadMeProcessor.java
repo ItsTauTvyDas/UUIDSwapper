@@ -16,7 +16,7 @@ import java.io.Writer;
 import java.util.*;
 import java.util.stream.Collectors;
 
-//@SuppressWarnings("unused") // stfu about that warning, me no like
+@SuppressWarnings("unused") // stfu about that warning, me no like
 @SupportedAnnotationTypes({
         "me.itstautvydas.uuidswapper.processor.ReadMeTitle",
         "me.itstautvydas.uuidswapper.processor.ReadMeDescription"
