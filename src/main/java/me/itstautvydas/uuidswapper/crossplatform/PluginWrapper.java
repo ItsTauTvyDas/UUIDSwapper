@@ -56,7 +56,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             .setPrettyPrinting()
             .disableHtmlEscaping()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_DASHES)
-            .registerTypeAdapterFactory(new UnknownFieldsCollectorAdapterFactory())
+            .registerTypeAdapterFactory(new UnknownFieldCollectorAdapterFactory())
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
             .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
             .registerTypeAdapterFactory(new StrictEnumTypeAdapterFactory())
@@ -250,12 +250,12 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             database.shutdown();
     }
 
-    private void log(Map.Entry<String, String> entry) {
+    private void logSwappedUuid(Map.Entry<String, String> entry) {
         var key = entry.getKey();
-        if (key.startsWith("u:"))
-            key = "(Username) " + key.substring(2);
-        else
+        if (Utils.isValidUuid(key))
             key = "(UUID) " + key;
+        else
+            key = "(Username) " + key;
         logInfo(CONFIGURATION_PREFIX, "# %s => %s", key, entry.getValue());
     }
 
@@ -289,13 +289,13 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         if (configuration.getSwappedUniqueIds().isEnabled()) {
             logInfo(CONFIGURATION_PREFIX, "Loaded %s swapped UUIDs.", configuration.getSwappedUniqueIds().getSwap().size());
             for (var entry : configuration.getSwappedUniqueIds().getSwap().entrySet())
-                log(entry);
+                logSwappedUuid(entry);
         }
 
         if (configuration.getSwappedPlayerNames().isEnabled()) {
             logInfo(CONFIGURATION_PREFIX, "Loaded %s custom player usernames.", configuration.getSwappedPlayerNames().getSwap().size());
             for (var entry : configuration.getSwappedPlayerNames().getSwap().entrySet())
-                log(entry);
+                logSwappedUuid(entry);
         }
     }
 
@@ -347,7 +347,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
                 playerRandomizer.nextUniqueId(uniqueId);
         }
 
-        if (configuration.getOnlineAuthentication().isCheckForOnlineUuid() && uniqueId != null) {
+        if (configuration.getOnlineAuthentication().isCheckForOnlineUniqueId() && uniqueId != null) {
             var offlineUuid = Utils.generateOfflineUniqueId(username);
             if (!offlineUuid.equals(uniqueId)) {
                 boolean fetchForProperties = false;
@@ -463,15 +463,19 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         String swappedUsername = null;
         String swappedUniqueId = null;
 
-        if (configuration.getSwappedUniqueIds().isEnabled()) {
-            var swappedUuids = configuration.getSwappedUniqueIds().getSwap();
-            swappedUniqueId = Utils.getSwappedValue(swappedUuids, profile.getFirst(), profile.getSecond());
-        }
+        if (configuration.getSwappedUniqueIds().isEnabled())
+            swappedUniqueId = Utils.getSwappedValue(
+                    configuration.getSwappedUniqueIds().getSwap(),
+                    profile.getFirst(),
+                    profile.getSecond()
+            );
 
-        if (configuration.getSwappedPlayerNames().isEnabled()) {
-            var swappedUsernames = configuration.getSwappedPlayerNames().getSwap();
-            swappedUsername = Utils.getSwappedValue(swappedUsernames, profile.getFirst(), profile.getSecond());
-        }
+        if (configuration.getSwappedPlayerNames().isEnabled())
+            swappedUsername = Utils.getSwappedValue(
+                    configuration.getSwappedPlayerNames().getSwap(),
+                    profile.getFirst(),
+                    profile.getSecond()
+            );
 
         if (swappedUsername != null || swappedUniqueId != null) {
             var prefix = "PlayerSwapper";

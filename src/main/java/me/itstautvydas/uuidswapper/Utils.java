@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @UtilityClass
@@ -26,9 +27,21 @@ public class Utils {
 
     public final String GENERIC_DISCONNECT_MESSAGE_ID = "multiplayer.disconnect.generic";
 
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "^[0-9a-fA-F]{8}-" +
+            "[0-9a-fA-F]{4}-" +
+            "[0-9a-fA-F]{4}-" +
+            "[0-9a-fA-F]{4}-" +
+            "[0-9a-fA-F]{12}$"
+    );
+
     public final Gson DEFAULT_GSON = new GsonBuilder()
             .disableHtmlEscaping()
             .create();
+
+    public static boolean isValidUuid(String uuid) {
+        return uuid != null && UUID_PATTERN.matcher(uuid).matches();
+    }
 
     public boolean isRunningFolia() {
         try {
@@ -40,7 +53,7 @@ public class Utils {
     }
 
     public String getSwappedValue(Map<String, String> map, String username, UUID uniqueId) {
-        var value = map.get("u:" + username);
+        var value = map.get(username);
         if (value == null)
             value = map.get(uniqueId.toString());
         return value;
