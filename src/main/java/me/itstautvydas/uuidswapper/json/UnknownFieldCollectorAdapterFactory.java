@@ -16,7 +16,7 @@ import java.util.*;
 // IT HAS BEEN 10 YEARS COME ON GOOGLE DO SOMETHING
 // https://itstautvydas.me/catgirls/nekoha-shizuku/yunowork.webp
 
-public class UnknownFieldsCollectorAdapterFactory implements TypeAdapterFactory {
+public class UnknownFieldCollectorAdapterFactory implements TypeAdapterFactory {
 
     @Override
     public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
@@ -40,6 +40,8 @@ public class UnknownFieldsCollectorAdapterFactory implements TypeAdapterFactory 
         var delegate = gson.getDelegateAdapter(this, type);
         var validFields = collectValidFieldNames(raw);
 
+        var collectsUnknown = UnknownFieldCollector.class.isAssignableFrom(raw);
+
         return new TypeAdapter<>() {
             @Override
             public void write(JsonWriter out, T value) throws IOException {
@@ -58,23 +60,45 @@ public class UnknownFieldsCollectorAdapterFactory implements TypeAdapterFactory 
                     return delegate.read(in);
 
                 var obj = new JsonObject();
+                var unknowns = collectsUnknown ? new LinkedHashMap<String, Object>() : null;
 
                 in.beginObject();
                 while (in.hasNext()) {
                     String name = in.nextName();
                     JsonElement value = com.google.gson.internal.Streams.parse(in);
 
-                    if (!validFields.contains(name))
-                        ConfigurationErrorCollector.collect(
-                                gson, ConfigurationErrorCollector.UNKNOWN_PROPERTY, name, in, false
-                        );
+                    if (!validFields.contains(name)) {
+                        var simple = tryGetSimpleValue(value);
+                        if (unknowns != null && simple != null)
+                            unknowns.put(name, simple);
+                        else
+                            ConfigurationErrorCollector.collect(
+                                    gson, ConfigurationErrorCollector.UNKNOWN_PROPERTY, name, in, false
+                            );
+                    }
                     obj.add(name, value);
                 }
                 in.endObject();
 
-                return delegate.fromJsonTree(obj);
+                var result = delegate.fromJsonTree(obj);
+                if (collectsUnknown && result instanceof UnknownFieldCollector ufc)
+                    ufc.unknownFields = unknowns;
+                return result;
             }
         };
+    }
+
+    private static Object tryGetSimpleValue(JsonElement element) {
+        if (element == null || element.isJsonNull() || !element.isJsonPrimitive())
+            return null;
+        var primitive = element.getAsJsonPrimitive();
+        if (primitive.isBoolean())
+            return primitive.getAsBoolean();
+        if (primitive.isString())
+            return primitive.getAsString();
+        if (primitive.isNumber())
+            return primitive.getAsNumber().longValue();
+        return null;
     }
 
     private static Set<String> collectValidFieldNames(Class<?> rawClass) {
