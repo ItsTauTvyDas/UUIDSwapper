@@ -183,7 +183,7 @@ public class PlayerDataFetcher {
             var prefix = getPrefix(null);
 
             if (fetcher.sendMessages)
-                fetcher.logger.logInfo(prefix, "Player %s original unique ID is %s", username, uniqueId);
+                fetcher.logger.logInfo(prefix, "Player's %s original unique ID is %s", username, uniqueId);
 
             int ignored = 0;
             for (int i = 0; i < services.size(); i++) {
@@ -234,7 +234,7 @@ public class PlayerDataFetcher {
                 }
             }
 
-            if (fetcher.sendMessages)
+            if (fetcher.sendMessages && fetcher.totalExecutionTime != 0)
                 fetcher.logger.logInfo(prefix, "Took %s/%sms to fetch data.", fetcher.totalExecutionTime, fetcher.config.getMaxTimeout());
 
             if (fetcher.config.getServiceConnectionThrottle() > 0)
@@ -288,17 +288,30 @@ public class PlayerDataFetcher {
     private void updateTotalExecutionTime() {
         placeholders.put("total-execution-time", totalExecutionTime);
         placeholders.put("total-took", totalExecutionTime);
-        placeholders.put("total-execution-time-left", config.getMaxTimeout() - totalExecutionTime);
-        placeholders.put("total-took-left", config.getMaxTimeout() - totalExecutionTime);
+        if (config.getMaxTimeout() > 0) {
+            placeholders.put("total-execution-time-left", config.getMaxTimeout() - totalExecutionTime);
+            placeholders.put("total-took-left", config.getMaxTimeout() - totalExecutionTime);
+        } else {
+            placeholders.put("total-execution-time-left", -1);
+            placeholders.put("total-took-left", -1);
+        }
     }
 
     private HttpRequest buildRequest(Configuration.ServiceConfiguration service, String prefix) {
-        var timeout = config.getMaxTimeout() - totalExecutionTime;
-        if (timeout <= config.getMinTimeout()) {
-            if (sendErrorMessages)
-                logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
-            return null;
+        var timeout = service.getTimeout();
+        if (config.getMaxTimeout() > 0) {
+            if (timeout == 0)
+                timeout = config.getMaxTimeout();
+            timeout -= totalExecutionTime;
+            if (timeout <= config.getMinTimeout()) {
+                if (sendErrorMessages)
+                    logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
+                return null;
+            }
         }
+
+        if (timeout == 0)
+            timeout = 5000;
 
         String queryString = Utils.replacePlaceholders(Utils.buildDataString(service.getQueryData()), placeholders);
         String endpoint = Utils.replacePlaceholders(service.getEndpoint(), placeholders);
@@ -323,7 +336,7 @@ public class PlayerDataFetcher {
                     Utils.replacePlaceholders(header.getValue(), placeholders)
             );
 
-        builder.timeout(Duration.ofMillis(Math.min(timeout, service.getTimeout())));
+        builder.timeout(Duration.ofMillis(timeout));
         return builder.build();
     }
 
@@ -482,8 +495,14 @@ public class PlayerDataFetcher {
 
         if (properties == null && sendErrorMessages)
             logger.logWarning(servicePrefix, "Failed to retrieve properties (even if fallbacks were used)", null);
-        if (properties != null && sendMessages)
-            logger.logInfo(prefix, "Properties successfully fetched for %s (took %s/%sms)", username, fetchTook, config.getMaxTimeout());
+        if (properties != null && sendMessages) {
+            if (config.getMaxTimeout() <= 0) {
+                logger.logInfo(prefix, "Properties successfully fetched for %s (took %sms)", username, fetchTook);
+            } else {
+                logger.logInfo(prefix, "Properties successfully fetched for %s (took %s/%sms)", username, fetchTook, config.getMaxTimeout());
+            }
+        }
+
         return properties;
     }
 
@@ -492,7 +511,6 @@ public class PlayerDataFetcher {
         var database = PluginWrapper.getCurrent().getDatabase();
         placeholders.clear();
 
-        placeholders.putAll(service.getCustomPlaceholders());
         placeholders.put("username", username);
         placeholders.put("uuid", uniqueId.toString());
         placeholders.put("database-running", database.isDriverRunning());
@@ -651,6 +669,10 @@ public class PlayerDataFetcher {
             if (disconnectMessage == null)
                 disconnectMessage = config.getServiceDefaults().getDefaultDisconnectMessage();
             if (disconnectMessage != null) {
+                for (var custom : service.getCustomPlaceholders().entrySet()) {
+                    if (custom.getValue() != null)
+                        placeholders.put("custom." + custom.getKey(), Utils.replacePlaceholders(custom.getValue().toString(), placeholders));
+                }
                 message = new Message(disconnectMessage, false).replacePlaceholders(placeholders);
             } else
                 message = new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true);
