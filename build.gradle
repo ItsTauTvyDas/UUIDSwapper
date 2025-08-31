@@ -59,6 +59,50 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
+// Configuration docs processing
+sourceSets {
+    processor {
+        java.srcDir 'src/processor/java'
+        resources.srcDir 'src/processor/resources'
+    }
+    main {
+        compileClasspath += sourceSets.processor.output
+        runtimeClasspath  += sourceSets.processor.output
+    }
+}
+
+configurations {
+    processorAnnotationProcessor
+}
+
+dependencies {
+    processorCompileOnly "org.projectlombok:lombok:1.18.38"
+    processorAnnotationProcessor "org.projectlombok:lombok:1.18.38"
+    processorImplementation "com.google.code.gson:gson:2.11.0"
+    processorImplementation "com.google.auto.service:auto-service-annotations:1.1.1"
+    processorAnnotationProcessor "com.google.auto.service:auto-service:1.1.1"
+    annotationProcessor files(sourceSets.processor.output)
+}
+
+tasks.named('compileProcessorJava') {
+    options.annotationProcessorPath = configurations.processorAnnotationProcessor
+}
+
+tasks.register("copyConfigurationDocs", Copy) {
+    from(layout.buildDirectory.file("classes/java/main/ConfigurationDocs.generated.md"))
+    into(layout.projectDirectory.file("wiki"))
+    rename { "Configuration.md" }
+}
+
+tasks.named('compileJava') {
+    dependsOn "copyConfigurationDocs"
+    dependsOn tasks.named('compileProcessorJava')
+}
+
+tasks.named("jar") {
+    exclude("ConfigurationDocs.generated.md")
+}
+
 // Testing
 sourceSets {
     test {
