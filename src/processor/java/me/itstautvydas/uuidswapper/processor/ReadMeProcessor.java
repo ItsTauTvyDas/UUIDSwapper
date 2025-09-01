@@ -6,10 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.MirroredTypeException;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.*;
 import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.Writer;
@@ -98,6 +95,10 @@ public class ReadMeProcessor extends AbstractProcessor {
                 if (typeMirror instanceof DeclaredType)
                     fieldType = ((DeclaredType) typeMirror).asElement().getSimpleName().toString();
 
+                List<TypeElement> sections = null;
+                if (linkTo != null)
+                    sections = getClasses(linkTo);
+
                 if (disableDescriptions || fieldDescription != null || descriptionName != null) {
                     if (!disableDescriptions) {
                         if (descriptionName == null)
@@ -110,7 +111,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                     classInfo.fields.add(new FieldInfo(
                             prefix + name,
                             descriptionName,
-                            toSectionName(linkTo),
+                            sections,
                             fieldType
                     ));
                 }
@@ -123,6 +124,18 @@ public class ReadMeProcessor extends AbstractProcessor {
                         processClass(superElement, name + ".", classInfo, map);
                     processClass(mergeElement, name + ".", classInfo, null);
                 }
+            }
+        }
+
+        var extraFields = type.getAnnotation(ReadMeExtraFields.class);
+        if (extraFields != null) {
+            for (int i = 0; i < extraFields.value().length; i += 3) {
+                classInfo.fields.add(new FieldInfo(
+                        prefix + extraFields.value()[i],
+                        extraFields.value()[i + 1],
+                        null,
+                        extraFields.value()[i + 2]
+                ));
             }
         }
 
@@ -185,7 +198,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                         LinkedHashMap::new
                 ));
         var builder = new StringBuilder();
-        boolean first = true;
+        var first = true;
         for (Map.Entry<TypeElement, ClassInfo> entry : sortedClasses.entrySet()) {
             ClassInfo classInfo = entry.getValue();
 
@@ -206,14 +219,31 @@ public class ReadMeProcessor extends AbstractProcessor {
                 var mpl = optionName.length();
                 var mdl = descriptionName.length();
 
-                // Find max lengths
+                // Find max option and description lengths
                 for (FieldInfo fieldInfo : classInfo.fields) {
                     mpl = Math.max(mpl, fieldInfo.option.length());
                     if (!disableDescriptions)
                         mdl = Math.max(mdl, fieldInfo.description.length());
-                    var sectionName = getSectionToLinkTo(fieldInfo);
-                    if (sectionName != null)
-                        mpl += sectionName.length() + 5; // 5 is for [](#) symbols count
+                    if (fieldInfo.linkToSections != null) {
+                        if (fieldInfo.linkToSections.size() == 1) {
+                            var sectionName = getSectionToLinkTo(fieldInfo, 0);
+                            if (sectionName != null) {
+                                mpl += sectionName.length() + 5; // [](#) symbols count
+                            }
+                        } else { // Multiple sections
+                            mdl += 3; // a space and ()
+                            var it = fieldInfo.linkToSections.iterator();
+                            for (int i = 0; it.hasNext(); i++) {
+                                var section = it.next();
+                                var sectionName = getSectionToLinkTo(fieldInfo, i);
+                                if (sectionName == null)
+                                    continue;
+                                mdl += sectionName.length() + section.getSimpleName().length() + 5; // [](#) symbols count
+                                if (it.hasNext())
+                                    mdl += 2; // comma and a space
+                            }
+                        }
+                    }
                 }
 
                 var fieldOptionName = applySpaces(optionName, mpl);
@@ -230,16 +260,32 @@ public class ReadMeProcessor extends AbstractProcessor {
                 for (FieldInfo fieldInfo : classInfo.fields) {
                     var option = classInfo.prefix + fieldInfo.option;
                     builder.append("| ");
-                    var sectionName = getSectionToLinkTo(fieldInfo);
-                    if (sectionName != null)
-                        builder.append(applySpaces("[" + option + "](#" + sectionName + ")", mpl));
-                    else
+                    if (fieldInfo.linkToSections != null && fieldInfo.linkToSections.size() == 1) { // Only one section
+                        var sectionName = getSectionToLinkTo(fieldInfo, 0);
+                        if (sectionName != null)
+                            builder.append(applySpaces("[" + option + "](#" + sectionName + ")", mpl));
+                    } else {
                         builder.append(applySpaces(option, mpl));
-                    if (disableDescriptions)
-                        builder.append(" |");
-                    else
-                        builder.append(" | ")
-                                .append(applySpaces(fieldInfo.description, mdl).replace("|", "\\|"));
+                    }
+                    if (!disableDescriptions) {
+                        var description = new StringBuilder(fieldInfo.description.replace("|", "\\|"));
+                        builder.append(" | ");
+                        if (fieldInfo.linkToSections != null && fieldInfo.linkToSections.size() > 1) { // Multiple sections
+                            description.append(" (");
+                            var it = fieldInfo.linkToSections.iterator();
+                            for (int i = 0; it.hasNext(); i++) {
+                                var section = it.next();
+                                var sectionName = getSectionToLinkTo(fieldInfo, i);
+                                if (sectionName == null)
+                                    continue;
+                                description.append("[").append(section.getSimpleName().toString()).append("](#").append(sectionName).append(")");
+                                if (it.hasNext())
+                                    description.append(", ");
+                            }
+                            description.append(')');
+                        }
+                        builder.append(applySpaces(description.toString(), mdl));
+                    }
                     builder.append(" |\n");
                 }
             }
@@ -248,24 +294,28 @@ public class ReadMeProcessor extends AbstractProcessor {
         return builder.toString();
     }
 
-    private String toSectionName(ReadMeLinkTo linkTo) {
-        if (linkTo == null)
-            return null;
+    private List<TypeElement> getClasses(ReadMeLinkTo linkTo) {
         try {
-            return linkTo.value().getSimpleName();
-        } catch (MirroredTypeException mte) {
-            TypeMirror tm = mte.getTypeMirror();
-            if (tm.getKind() == TypeKind.DECLARED)
-                return ((DeclaredType) tm).asElement().getSimpleName().toString();
+            linkTo.value(); // Trigger exception
+            return null;
+        } catch (MirroredTypesException mte) {
+            java.util.List<TypeElement> result = new java.util.ArrayList<>(mte.getTypeMirrors().size());
+            for (TypeMirror tm : mte.getTypeMirrors())
+                result.add((TypeElement) ((DeclaredType) tm).asElement());
+            return result;
         }
-        return null;
     }
 
-    private String getSectionToLinkTo(FieldInfo fieldInfo) {
-        var sectionName = fieldInfo.linkTo;
-        if (sectionName == null)
+    private String getSectionToLinkTo(FieldInfo fieldInfo, int index) {
+        var sections = fieldInfo.linkToSections;
+        if (sections == null) {
+            if (fieldInfo.className == null)
+                return null;
             return sectionsToLink.get(fieldInfo.className);
-        return sectionsToLink.get(sectionName);
+        }
+        if (index >= 0 && index < sections.size())
+            return sectionsToLink.get(sections.get(index).getSimpleName().toString());
+        return null;
     }
 
     private static String toReadMeSectionName(String input) {
@@ -277,7 +327,10 @@ public class ReadMeProcessor extends AbstractProcessor {
     }
 
     private static String applySpaces(String string, int width) {
-        return string + " ".repeat(width - string.length());
+        var spaces = width - string.length();
+        if (spaces < 0)
+            return string;
+        return string + " ".repeat(spaces);
     }
 
     private static String getJsonSerializedName(VariableElement field) {
@@ -294,5 +347,5 @@ public class ReadMeProcessor extends AbstractProcessor {
     }
 
     private record ClassInfo(String title, String description, int order, String prefix, List<FieldInfo> fields, ReadMeTableSettings settings) {}
-    private record FieldInfo(String option, String description, String linkTo, String className) {}
+    private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className) {}
 }

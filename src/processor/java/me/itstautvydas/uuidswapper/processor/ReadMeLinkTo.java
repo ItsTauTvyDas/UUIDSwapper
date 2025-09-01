@@ -8,5 +8,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.SOURCE)
 public @interface ReadMeLinkTo {
-    Class<?> value();
+    Class<?>[] value();
 }
