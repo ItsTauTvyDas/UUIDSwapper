@@ -63,7 +63,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
             .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
             .registerTypeAdapterFactory(new StrictEnumTypeAdapterFactory())
-            .registerTypeAdapterFactory(new DriverPolymorphicFactory())
+            .registerTypeAdapterFactory(new DriverPolymorphicAdapterFactory())
             .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
