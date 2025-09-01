@@ -57,7 +57,7 @@ public class ReadMeProcessor extends AbstractProcessor {
             if (title == null)
                 return null;
             classInfo = classes.computeIfAbsent(type, t -> new ClassInfo(
-                    title.value(),
+                    title.value().isBlank() ? t.getSimpleName().toString().replaceAll("([a-z])([A-Z])", "$1 $2") :  title.value(),
                     description != null ? description.value() : "",
                     title.order(),
                     prefix,
@@ -208,10 +208,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                 builder.append("\n");
             first = false;
 
-            var title = classInfo.title;
-            if (title.isBlank())
-                title = entry.getKey().getSimpleName().toString().replaceAll("([a-z])([A-Z])", "$1 $2");
-            builder.append("# ").append(title).append("\n");
+            builder.append("# ").append(classInfo.title).append("\n");
             if (!classInfo.description.isBlank())
                 builder.append(classInfo.description).append("\n\n");
 
@@ -227,9 +224,8 @@ public class ReadMeProcessor extends AbstractProcessor {
                     if (fieldInfo.linkToSections != null) {
                         if (fieldInfo.linkToSections.size() == 1) {
                             var sectionName = getSectionToLinkTo(fieldInfo, 0);
-                            if (sectionName != null) {
+                            if (sectionName != null)
                                 mpl += sectionName.length() + 5; // [](#) symbols count
-                            }
                         } else { // Multiple sections
                             mdl += 3; // a space and ()
                             var it = fieldInfo.linkToSections.iterator();
