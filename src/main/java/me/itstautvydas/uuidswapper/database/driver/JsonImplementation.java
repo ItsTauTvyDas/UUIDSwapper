@@ -1,27 +1,38 @@
 package me.itstautvydas.uuidswapper.database.driver;
 
 import com.google.gson.JsonObject;
-import lombok.Getter;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
+import me.itstautvydas.uuidswapper.processor.ReadMeCallSuperClass;
+import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
+import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
 
 import java.nio.file.Path;
 import java.util.UUID;
 
-@Getter
+@SuppressWarnings("unused")
+@ReadMeTitle(value = "(Database Driver) JSON Implementation", order = -996)
+@ReadMeDescription("JSON file-based driver to use for caching player data.")
+@ReadMeCallSuperClass()
 public class JsonImplementation extends DriverImplementation {
     private transient Path databaseFilePath;
     private transient JsonObject data;
-    private boolean separateFileForEachPlayer;
+    @ReadMeDescription("Should driver make a directory to stone each player in their own JSON file")
+    private boolean split;
+    @ReadMeDescription("Should JSON be **always** loaded")
+    private boolean keepLoaded;
+    @ReadMeDescription("Should JSON be saved as beautified")
+    private boolean beautifyJson;
+    @ReadMeDescription("File to store JSON. If `split` is enabled and no {original-uuid} is defined, the UUID will be prefixed with a dot after it")
     private String fileName;
 
     @Override
     public boolean init() {
         databaseFilePath = PluginWrapper.getCurrent()
                 .getDataDirectory()
-                .resolve(getFileName())
+                .resolve(fileName)
                 .toAbsolutePath();
         return true;
     }

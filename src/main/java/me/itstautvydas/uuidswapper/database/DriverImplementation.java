@@ -6,6 +6,8 @@ import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.json.PostProcessable;
+import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
+import me.itstautvydas.uuidswapper.processor.ReadMeExtraFields;
 
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -16,6 +18,10 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 
 @Getter
+@ReadMeExtraFields({
+        // JSON's class field is only used in DriverPolymorphicAdapterFactory, no need to have it in the class itself
+        "class", "(Do not edit unless you are implementing your own driver!!!) Driver class path to load and initiate for later use, if class is defined without a package, it's treated as built-in one", "String"
+})
 public abstract class DriverImplementation implements PostProcessable {
     public static final String CREATED_AT = "created_at";
     public static final String UPDATED_AT = "updated_at";
@@ -30,16 +36,19 @@ public abstract class DriverImplementation implements PostProcessable {
     public static final String RANDOM_PLAYER_CACHE_USERNAME = "username";
     public static final String RANDOM_PLAYER_CACHE_UUID = "uuid";
 
+    @ReadMeDescription("Name of the driver")
     private String name; // Expose this to GSON
     private transient String prefix;
-    protected transient boolean supportsCaching;
-    protected transient boolean isDatabase;
 
+    protected transient boolean supportsCaching;
+    protected transient boolean connectionBased;
+
+    @Override
     public void postProcessed() {
         this.prefix = "DatabaseManager/" + name;
     }
 
-    private static Path getDriverPath(DriverImplementation driver) {
+    public static Path getDriverPath(DriverImplementation driver) {
         return PluginWrapper.getCurrent().getDriversDirectory().resolve(driver.name.replace(" ", "_") + ".jar");
     }
 
