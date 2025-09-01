@@ -60,6 +60,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             .registerTypeAdapterFactory(new RequiredPropertyAdapterFactory())
             .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
             .registerTypeAdapterFactory(new StrictEnumTypeAdapterFactory())
+            .registerTypeAdapterFactory(new DriverPolymorphicFactory())
             .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
@@ -259,7 +260,8 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         logInfo(CONFIGURATION_PREFIX, "# %s => %s", key, entry.getValue());
     }
 
-    public void reloadConfiguration() throws Exception {
+    public long reloadConfiguration() throws Exception {
+        logInfo(CONFIGURATION_PREFIX, "Loading configuration...");
         driversDirectory = dataDirectory.resolve("drivers");
         Files.createDirectories(driversDirectory); // also creates the main one
 
@@ -283,7 +285,6 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             playerRandomizer = null;
         }
 
-        logInfo(CONFIGURATION_PREFIX, "Configuration loaded in %sms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         logInfo(CONFIGURATION_PREFIX, "Using online UUIDs => %s", configuration.getOnlineAuthentication().isEnabled());
 
         if (configuration.getSwappedUniqueIds().isEnabled()) {
@@ -297,6 +298,10 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             for (var entry : configuration.getSwappedPlayerNames().getSwap().entrySet())
                 logSwappedUuid(entry);
         }
+
+        var took = System.nanoTime() - start;
+        logInfo(CONFIGURATION_PREFIX, "Configuration loaded in %sms", TimeUnit.NANOSECONDS.toMillis(took));
+        return took;
     }
 
     public void onPlayerDisconnect(String username, UUID uniqueId) {
@@ -309,7 +314,6 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             @NotNull String username,
             @Nullable UUID uniqueId,
             @Nullable List<ProfilePropertyWrapper> properties,
-            @NotNull String address,
             boolean cacheFetchedData,
             @Nullable Runnable switchToOfflineMode,
             @NotNull Consumer<Message> disconnectHandler) {
@@ -381,7 +385,6 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         return PlayerDataFetcher.fetchPlayerData(
                 username,
                 uniqueId,
-                address,
                 cacheFetchedData && playerRandomizer == null,
                 playerRandomizer == null,
                 false,
@@ -540,8 +543,9 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         var old = configuration;
         var old0 = rawConfiguration;
         try {
-            PlayerDataFetcher.clearCache();
-            reloadConfiguration();
+            PlayerDataFetcher.forgetLastService();
+            var took = reloadConfiguration();
+            placeholders.put("took", took);
             database.clearConnection();
             if (!database.loadDriverFromConfiguration()) {
                 placeholders.put("driver", database.getDriver());
@@ -552,7 +556,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         } catch (Exception ex) {
             configuration = old;
             rawConfiguration = old0;
-            placeholders.put("exception_message", ex.getMessage());
+            Utils.addExceptionPlaceholders(ex, placeholders);
             Utils.printException(ex, x -> logWarning("ReloadCommand", "Failed to reload the configuration!", ex));
             sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadFailed, placeholders);
         }
