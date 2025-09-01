@@ -8,6 +8,9 @@ import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.database.CacheableConnectionDriverImplementation;
+import me.itstautvydas.uuidswapper.processor.ReadMeCallSuperClass;
+import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
+import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
 
 import java.nio.file.Path;
 import java.sql.*;
@@ -16,15 +19,22 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 @SuppressWarnings({"SqlNoDataSourceInspection", "unused", "FieldMayBeFinal"}) // SHUSH
-@Getter
+@ReadMeTitle(value = "(Database Driver) SQLite Implementation",order = -997)
+@ReadMeDescription("SQLite (JDBC) file-based driver to use for caching player data. The driver is not bundled with the plugin but you have the ability to automatically download it and load it.")
+@ReadMeCallSuperClass()
 public class SQLiteImplementation extends CacheableConnectionDriverImplementation {
     private transient Connection connection = null;
     private transient Path databaseFilePath;
 
+    @ReadMeDescription("Should SQLite driver be downloaded")
     private boolean downloadDriver;
+    @ReadMeDescription("Download URL to download driver from")
     private String downloadUrl;
     @SerializedName("file")
+    @ReadMeDescription("File to store SQLite database")
     private String fileName;
+    @SerializedName("args") // IDE is complaining too much
+    @ReadMeDescription("SQLite arguments")
     private Map<String, String> args = new HashMap<>();
 
     private Connection newConnection() throws Exception {
@@ -47,10 +57,10 @@ public class SQLiteImplementation extends CacheableConnectionDriverImplementatio
     @Override
     public boolean init() throws Exception {
         supportsCaching = true;
-        isDatabase = true;
+        connectionBased = true;
         databaseFilePath = PluginWrapper.getCurrent()
                 .getDataDirectory()
-                .resolve(getFileName())
+                .resolve(fileName)
                 .toAbsolutePath();
         if (!downloadDriver(this, downloadDriver, downloadUrl))
             return false;

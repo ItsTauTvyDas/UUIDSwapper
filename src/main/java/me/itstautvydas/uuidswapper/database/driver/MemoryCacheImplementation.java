@@ -3,11 +3,18 @@ package me.itstautvydas.uuidswapper.database.driver;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
+import me.itstautvydas.uuidswapper.processor.ReadMeCallSuperClass;
+import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
+import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@SuppressWarnings("unused")
+@ReadMeTitle(value = "(Database Driver) Memory Cache Implementation", order = -996)
+@ReadMeDescription("Memory-based driver to use for caching player data. No configuration needed for this.")
+@ReadMeCallSuperClass()
 public class MemoryCacheImplementation extends DriverImplementation {
     private final List<OnlinePlayerData> onlineOnlinePlayerData = new ArrayList<>();
     private final List<PlayerData> randomPlayerCache = new ArrayList<>();

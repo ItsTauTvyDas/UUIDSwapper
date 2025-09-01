@@ -9,6 +9,9 @@ import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
+import me.itstautvydas.uuidswapper.database.driver.JsonImplementation;
+import me.itstautvydas.uuidswapper.database.driver.MemoryCacheImplementation;
+import me.itstautvydas.uuidswapper.database.driver.SQLiteImplementation;
 import me.itstautvydas.uuidswapper.enums.ConditionsMode;
 import me.itstautvydas.uuidswapper.enums.ConsoleMessageType;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
@@ -25,44 +28,15 @@ import java.util.*;
 @Getter
 public class Configuration {
     @ToString @Getter
-    @ReadMeTitle()
+    @ReadMeTitle(order = -999)
     @ReadMeDescription("This only works on paper and velocity!")
     public static class PaperConfiguration {
         @ReadMeDescription("Should plugin use Paper's MiniMessages (color codes with `&` won't work if this is enabled)")
         private boolean useMiniMessages;
     }
 
-//    @ToString @Getter
-//    @ReadMeTitle()
-//    @ReadMeDescription("Database is used for caching fetched player data.")
-//    public static class DatabaseConfiguration extends UnknownFieldCollector {
-//        @RequiredProperty
-//        @ReadMeDescription("Should database be enabled")
-//        private boolean enabled;
-//        @ReadMeDescription("Should drive be automatically downloaded")
-//        private boolean downloadDriver = true;
-//        @SerializedName("download-link")
-//        @ReadMeDescription("Optional. Driver's download link if you want to change it or there's a newer version version")
-//        private String driverDownloadLink;
-//        @RequiredProperty @SerializedName("driver")
-//        @ReadMeDescription("Which driver to use (Json, Memory or SQLite)")
-//        private String driverName;
-//        @SerializedName("file")
-//        @ReadMeDescription("Specify to which file save database if the driver is file-based")
-//        private String fileName;
-//        @ReadMeDescription("Driver's connection timeout")
-//        private long timeout = 5000;
-//        @ReadMeDescription("For how much time in seconds driver's connection should be open (doesn't do anything if it's not connection-based river)")
-//        private long keepOpenTime = 10;
-//        @ReadMeDescription("Internal timer's update frequency in seconds for checking keep-open-time")
-//        private long timerRepeatTime = 1;
-//        @SerializedName("debug")
-//        @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
-//        private boolean debugEnabled = false;
-//    }
-
     @ToString @Getter
-    @ReadMeTitle()
+    @ReadMeTitle(order = -998)
     @ReadMeDescription("Database is used for caching fetched player data.")
     public static class DatabaseConfiguration {
         @RequiredProperty
@@ -74,7 +48,12 @@ public class Configuration {
         @SerializedName("debug")
         @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
         private boolean debugEnabled = false;
-        @ReadMeDescription("Driver definitions, defaults (built-in) are provided by default")
+        @ReadMeDescription("Defined drivers implementations")
+        @ReadMeLinkTo({
+                SQLiteImplementation.class,
+                JsonImplementation.class,
+                MemoryCacheImplementation.class
+        })
         private List<DriverImplementation> drivers = new ArrayList<>();
 
         public DriverImplementation getDriver(String name) {
@@ -221,7 +200,7 @@ public class Configuration {
 
     @ToString(callSuper = true) @Getter
     @ReadMeTitle()
-    @ReadMeDescription("Service is used for fetching player's data.")
+    @ReadMeDescription("A service is used for fetching player's data.")
     public static class ServiceConfiguration extends DefaultServiceConfiguration implements PostProcessable {
         @ReadMeDescription("Should this service be enabled")
         private boolean enabled = true;
