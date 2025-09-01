@@ -1,6 +1,7 @@
 package me.itstautvydas.uuidswapper.data;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 @AllArgsConstructor
 @Getter

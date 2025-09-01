@@ -2,7 +2,6 @@ package me.itstautvydas.uuidswapper.database.driver;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Getter;
-import lombok.ToString;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;

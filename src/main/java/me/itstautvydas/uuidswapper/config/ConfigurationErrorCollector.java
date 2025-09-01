@@ -4,7 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import me.itstautvydas.uuidswapper.exception.ConfigurationException;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class ConfigurationErrorCollector extends HashSet<String> {
