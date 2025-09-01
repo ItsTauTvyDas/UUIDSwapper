@@ -11,6 +11,9 @@ public class ConfigurationErrorCollector extends HashSet<String> {
     public static final String INVALID_ENUM = "Invalid enum value";
     public static final String MISSING_PROPERTY = "Missing required property";
     public static final String UNKNOWN_PROPERTY = "Invalid property";
+    public static final String IMPLEMENTATION_ERROR = "Resolved implementation class does not extend DriverImplementation";
+    public static final String UNKNOWN_DRIVER = "Unknown driver class %s, resolved";
+    public static final String DRIVER_MISSING_CLASS = "Mising class field";
     public static final String ERROR_MESSAGE = "Failed to correctly parse the configuration!";
 
     private static final Map<Gson, ConfigurationErrorCollector> map = new HashMap<>();
@@ -26,6 +29,10 @@ public class ConfigurationErrorCollector extends HashSet<String> {
 
     public static void collect(Gson gson, String message, Object key, JsonReader reader, boolean severeError) {
         collect(gson, String.format("%s %s at %s", message, key, reader.getPath()), severeError);
+    }
+
+    public static void collect(Gson gson, String message, JsonReader reader, boolean severeError) {
+        collect(gson, String.format("%s at %s", message, reader.getPath()), severeError);
     }
 
     public static void throwIfAnySevereErrors(Gson gson) {

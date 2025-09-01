@@ -1,6 +1,7 @@
-package me.itstautvydas.uuidswapper.database.implementation;
+package me.itstautvydas.uuidswapper.database.driver;
 
 import com.google.gson.JsonObject;
+import lombok.Getter;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
@@ -9,16 +10,20 @@ import me.itstautvydas.uuidswapper.database.DriverImplementation;
 import java.nio.file.Path;
 import java.util.UUID;
 
+@Getter
 public class JsonImplementation extends DriverImplementation {
-    private Path databaseFilePath;
-    private JsonObject data;
+    private transient Path databaseFilePath;
+    private transient JsonObject data;
+    private boolean separateFileForEachPlayer;
+    private String fileName;
 
     @Override
-    public void init() throws Exception {
+    public boolean init() {
         databaseFilePath = PluginWrapper.getCurrent()
                 .getDataDirectory()
-                .resolve(getConfiguration().getFileName())
+                .resolve(getFileName())
                 .toAbsolutePath();
+        return true;
     }
 
     @Override
@@ -44,11 +49,6 @@ public class JsonImplementation extends DriverImplementation {
     @Override
     public void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception {
 
-    }
-
-    @Override
-    public OnlinePlayerData getOnlinePlayerCache(String address) throws Exception {
-        return null;
     }
 
     @Override

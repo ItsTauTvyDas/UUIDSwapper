@@ -4,12 +4,33 @@
   },
   "database": {
     "enabled": false,
-    "download-driver": true,
     "driver": "SQLite",
-    "file": "players-data.db",
-    "timeout": 5000,
-    "keep-open-time": 10,
-    "timer-repeat-time": 1,
+    "drivers": [
+      {
+        "name": "SQLite",
+        "class": "SQLiteImplementation",
+        "download-driver": true,
+        "download-url": "https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.49.1.0/sqlite-jdbc-3.49.1.0.jar",
+        "file": "players-data.db",
+        "args": {
+          "journal_mode": "WAL",
+          "synchronous": "NORMAL"
+        },
+        "timeout": 5000,
+        "keep-open-time": 10,
+        "timer-repeat-time": 1
+      },
+      {
+        "name": "JSON",
+        "class": "JsonImplementation",
+        "separate-file-for-each-player": false,
+        "file": "players-data.json"
+      },
+      {
+        "name": "Memory",
+        "class": "MemoryCacheImplementation"
+      }
+    ],
     "debug": false
   },
   "online-authentication": {
@@ -21,7 +42,7 @@
     "fallback-service-remember-time": 21600,
     "max-timeout": 6000,
     "min-timeout": 1000,
-    "check-for-online-uuid": true,
+    "check-for-online-unique-id": true,
     "send-messages-to-console": true,
     "send-error-messages-to-console": true,
     "service-connection-throttle": 5000,
@@ -158,8 +179,8 @@
       "&eTest service. UUID is optional, if empty - offline UUID will be made based on the username.&r",
       "  /{command} test <service> <username> [UUID]"
     ],
-    "reload-success": "{prefix}&aPlugin successfully reloaded!",
-    "reload-database-driver-failed": "{prefix}&rFailed to load {driver} driver from configuration!",
+    "reload-success": "{prefix}&aPlugin successfully reloaded! (took {took}ms",
+    "reload-database-driver-failed": "{prefix}&rFailed to load {driver} driver from configuration! Database will be disabled.",
     "reload-failed": [
       "{prefix}&cFailed to reload configuration, check console for full error!",
       "{prefix}  Error: &4{exception_message}",

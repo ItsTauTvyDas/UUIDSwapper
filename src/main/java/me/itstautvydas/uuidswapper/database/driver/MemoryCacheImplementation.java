@@ -1,4 +1,4 @@
-package me.itstautvydas.uuidswapper.database.implementation;
+package me.itstautvydas.uuidswapper.database.driver;
 
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
@@ -13,7 +13,8 @@ public class MemoryCacheImplementation extends DriverImplementation {
     private final List<PlayerData> randomPlayerCache = new ArrayList<>();
 
     @Override
-    public void init() {
+    public boolean init() {
+        return true;
     }
 
     @Override
@@ -37,14 +38,6 @@ public class MemoryCacheImplementation extends DriverImplementation {
     @Override
     public void storeOnlinePlayerCache(OnlinePlayerData player) {
         onlineOnlinePlayerData.add(player);
-    }
-
-    @Override
-    public OnlinePlayerData getOnlinePlayerCache(String address) {
-        return onlineOnlinePlayerData.stream()
-                .filter(player -> player.getAddress().equals(address))
-                .findFirst()
-                .orElse(null);
     }
 
     @Override

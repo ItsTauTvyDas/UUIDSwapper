@@ -8,12 +8,12 @@ import lombok.ToString;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.database.DriverImplementation;
 import me.itstautvydas.uuidswapper.enums.ConditionsMode;
 import me.itstautvydas.uuidswapper.enums.ConsoleMessageType;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
 import me.itstautvydas.uuidswapper.enums.ServiceStateEvent;
 import me.itstautvydas.uuidswapper.json.PostProcessable;
-import me.itstautvydas.uuidswapper.json.UnknownFieldCollector;
 import me.itstautvydas.uuidswapper.processor.*;
 import me.itstautvydas.uuidswapper.service.RateLimitable;
 import org.jetbrains.annotations.Nullable;
@@ -32,35 +32,58 @@ public class Configuration {
         private boolean useMiniMessages;
     }
 
+//    @ToString @Getter
+//    @ReadMeTitle()
+//    @ReadMeDescription("Database is used for caching fetched player data.")
+//    public static class DatabaseConfiguration extends UnknownFieldCollector {
+//        @RequiredProperty
+//        @ReadMeDescription("Should database be enabled")
+//        private boolean enabled;
+//        @ReadMeDescription("Should drive be automatically downloaded")
+//        private boolean downloadDriver = true;
+//        @SerializedName("download-link")
+//        @ReadMeDescription("Optional. Driver's download link if you want to change it or there's a newer version version")
+//        private String driverDownloadLink;
+//        @RequiredProperty @SerializedName("driver")
+//        @ReadMeDescription("Which driver to use (Json, Memory or SQLite)")
+//        private String driverName;
+//        @SerializedName("file")
+//        @ReadMeDescription("Specify to which file save database if the driver is file-based")
+//        private String fileName;
+//        @ReadMeDescription("Driver's connection timeout")
+//        private long timeout = 5000;
+//        @ReadMeDescription("For how much time in seconds driver's connection should be open (doesn't do anything if it's not connection-based river)")
+//        private long keepOpenTime = 10;
+//        @ReadMeDescription("Internal timer's update frequency in seconds for checking keep-open-time")
+//        private long timerRepeatTime = 1;
+//        @SerializedName("debug")
+//        @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
+//        private boolean debugEnabled = false;
+//    }
+
     @ToString @Getter
     @ReadMeTitle()
     @ReadMeDescription("Database is used for caching fetched player data.")
-    public static class DatabaseConfiguration extends UnknownFieldCollector {
+    public static class DatabaseConfiguration {
         @RequiredProperty
         @ReadMeDescription("Should database be enabled")
         private boolean enabled;
-        @ReadMeDescription("Should drive be automatically downloaded")
-        private boolean downloadDriver = true;
-        @SerializedName("download-link")
-        @ReadMeDescription("Optional. Driver's download link if you want to change it or there's a newer version version")
-        private String driverDownloadLink;
         @RequiredProperty @SerializedName("driver")
-        @ReadMeDescription("Which driver to use (Json, Memory or SQLite)")
+        @ReadMeDescription("Which driver to use from `drivers` array")
         private String driverName;
-        @SerializedName("file")
-        @ReadMeDescription("Specify to which file save database if the driver is file-based")
-        private String fileName;
-        @ReadMeDescription("Driver's connection timeout")
-        private long timeout = 5000;
-        @ReadMeDescription("For how much time in seconds driver's connection should be open (doesn't do anything if it's not connection-based river)")
-        private long keepOpenTime = 10;
-        @ReadMeDescription("Internal timer's update frequency in seconds for checking keep-open-time")
-        private long timerRepeatTime = 1;
         @SerializedName("debug")
         @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
         private boolean debugEnabled = false;
-    }
+        @ReadMeDescription("Driver definitions, defaults (built-in) are provided by default")
+        private List<DriverImplementation> drivers = new ArrayList<>();
 
+        public DriverImplementation getDriver(String name) {
+            return drivers.stream()
+                    .filter(driver -> driver.getName().equals(name))
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
 
     @ToString @Getter
     @ReadMeTitle()
@@ -296,13 +319,13 @@ public class Configuration {
         @RequiredProperty
         @ReadMeDescription("""
                 At what event should this response handler be executed. Available events:
-                \tPRE_REQUEST - action before request
-                \tPOST_REQUEST - action after request
-                \tFETCHED_UUID - action when UUID was fetched
-                \tPRE_PROPERTIES_FETCH - action when properties are about to be fetched (and checked if they should be fetched)
-                \tFETCHED_PROPERTIES - action when properties were fetched
-                \tPRE_FALLBACK_USE - action on before any fallback use
-                \tPLAYER_DATA_FETCHED - last action when player UUID and/or properties were fetched""")
+                \t`PRE_REQUEST` - action before request
+                \t`POST_REQUEST` - action after request
+                \t`FETCHED_UUID` - action when UUID was fetched
+                \t`PRE_PROPERTIES_FETCH` - action when properties are about to be fetched (and checked if they should be fetched)
+                \t`FETCHED_PROPERTIES` - action when properties were fetched
+                \t`PRE_FALLBACK_USE` - action on before any fallback use
+                \t`PLAYER_DATA_FETCHED` - last action when player's UUID and/or properties were fetched""")
         private ServiceStateEvent event;
         @ReadMeDescription("Should the player be allowed to join (this is forceful option, meaning if it's true, no matter " +
                 "what, the player will be able to join, if false - instant disconnect, null - allow plugin to decide internally)")
@@ -484,24 +507,35 @@ public class Configuration {
 
     @ToString @Getter
     @ReadMeTitle()
-    @ReadMeTableSettings(disableDescription = true)
-    @ReadMeDescription("I won't explain here anything because it's pretty clear anyways.")
+    @ReadMeDescription("""
+            Messages for command output. Placeholders available in all messages:
+            `{command}` - command name
+            `{prefix}` - prefix defined in `prefix`""")
     public static class CommandMessagesConfiguration {
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Command's prefix")
         private String prefix;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Message when no arguments")
         private String noArguments;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Message when reload was successful. Available placeholders:\n" +
+                "`{took}` - how many milliseconds took to ")
         private String reloadSuccess;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Message when database driver failed to load. Available placeholders:\n" +
+                "`{driver}` - driver's name that failed to load")
         private String reloadDatabaseDriverFailed;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("""
+                Message when plugin failed to reload. Available placeholders:
+                `{error.class}` - exception's full (with package) class
+                `{error.class-name}` - exception's class name
+                `{error.message}` - exception's message""")
         private String reloadFailed;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("""
+                Message when player successfully pretends to be another player on next server join. Available placeholders:
+                `{new_username}` - player's new username
+                `{new_uuid}` - player's new unique ID""")
         private String playerPretendSuccess;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Message when plugin wasn't able to fake another player")
         private String playerPretendFailed;
-        @RequiredProperty @ReadMeDescription()
+        @RequiredProperty @ReadMeDescription("Header message for debug messages")
         private String debugHeader;
     }
 
