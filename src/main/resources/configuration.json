@@ -23,7 +23,7 @@
       {
         "name": "JSON",
         "class": "JsonImplementation",
-        "separate-file-for-each-player": false,
+        "split": false,
         "file": "players-data.json"
       },
       {
@@ -35,6 +35,7 @@
   },
   "online-authentication": {
     "enabled": false,
+    "allow-offline-players": false,
     "use-service": "PlayerDB",
     "fallback-services": [
       "MojangAPI"

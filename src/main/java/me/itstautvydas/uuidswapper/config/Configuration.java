@@ -72,6 +72,8 @@ public class Configuration {
         @RequiredProperty
         @ReadMeDescription("Should online authentication be enabled")
         private boolean enabled;
+        @ReadMeDescription("Should offline players be allowed on online/secure server (Velocity/BungeeCord only)")
+        private boolean allowOfflinePlayers;
         @RequiredProperty @SerializedName("use-service")
         @ReadMeDescription("Which service to use")
         private String serviceName;
