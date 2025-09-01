@@ -3,7 +3,7 @@ package me.itstautvydas.uuidswapper.data;
 import lombok.*;
 
 @AllArgsConstructor
-@Data
+@Getter
 public class ProfilePropertyWrapper {
     private String name;
     private String value;
