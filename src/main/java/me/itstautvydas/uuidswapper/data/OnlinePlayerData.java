@@ -3,6 +3,7 @@ package me.itstautvydas.uuidswapper.data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import me.itstautvydas.uuidswapper.Utils;
 
 import java.util.List;
 import java.util.Objects;
@@ -13,15 +14,13 @@ public class OnlinePlayerData {
     private final UUID originalUniqueId;
     private UUID onlineUniqueId;
     private List<ProfilePropertyWrapper> properties;
-    private String address;
-    private final Long createdAt;
+    private Long createdAt;
     private Long updatedAt;
 
-    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfilePropertyWrapper> properties, String address) {
+    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfilePropertyWrapper> properties) {
         this.originalUniqueId = originalUniqueId;
         this.onlineUniqueId = onlineUniqueId;
         this.properties = properties;
-        this.address = address;
         this.createdAt = System.currentTimeMillis();
         this.updatedAt = System.currentTimeMillis();
     }
@@ -32,5 +31,9 @@ public class OnlinePlayerData {
 
     public UUID getOnlineUniqueId() {
         return onlineUniqueId == null ? originalUniqueId : onlineUniqueId;
+    }
+
+    public String propertiesToJsonString() {
+        return Utils.DEFAULT_GSON.toJson(properties);
     }
 }

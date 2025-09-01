@@ -58,7 +58,6 @@ public class UUIDSwapperVelocity {
                 event.getUsername(),
                 event.getUniqueId(),
                 null,
-                event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
                 true,
                 () -> event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode()),
                 (message) -> {

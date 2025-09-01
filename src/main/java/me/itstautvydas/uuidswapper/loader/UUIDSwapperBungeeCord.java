@@ -44,13 +44,12 @@ public class UUIDSwapperBungeeCord extends Plugin implements Listener {
 
     @EventHandler
     public void handlePlayerPreLogin(LoginEvent event) {
-        final var inetAddress = (InetSocketAddress) event.getConnection().getSocketAddress();
         var completableFuture = PluginWrapper.getCurrent().onPlayerLogin(
                 event.getConnection().getName(),
                 event.getConnection().getUniqueId(),
                 null,
-                inetAddress.getAddress().getHostAddress(),
-                true, null,
+                true,
+                null,
 //                    () -> event.getConnection().setOnlineMode(false),
                 (message) -> {
                     if (message.hasMessage()) {

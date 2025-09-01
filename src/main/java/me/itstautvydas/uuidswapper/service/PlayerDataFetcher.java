@@ -42,7 +42,6 @@ public class PlayerDataFetcher {
 
     private final String username;
     private final UUID uniqueId;
-    private final String remoteAddress;
     private final SimplifiedLogger logger;
     private final boolean cacheFetchedData;
     private final boolean cacheDatabase;
@@ -61,12 +60,11 @@ public class PlayerDataFetcher {
     private boolean applyProperties = true;
     private boolean requireProperties;
 
-    public PlayerDataFetcher(String username, UUID uniqueId, String remoteAddress, SimplifiedLogger logger,
+    public PlayerDataFetcher(String username, UUID uniqueId, SimplifiedLogger logger,
                              boolean cacheFetchedData, boolean cacheDatabase, boolean forceErrorMessages) {
         this.config = PluginWrapper.getCurrent().getConfiguration().getOnlineAuthentication();
         this.username = username;
         this.uniqueId = Objects.requireNonNullElse(uniqueId, Utils.offlineUniqueIdIfNull(username, uniqueId));
-        this.remoteAddress = remoteAddress;
         this.logger = Objects.requireNonNullElse(logger, PluginWrapper.getCurrent());
         this.cacheFetchedData = cacheFetchedData;
         this.cacheDatabase = cacheDatabase;
@@ -81,7 +79,7 @@ public class PlayerDataFetcher {
             fetched.setUpdatedAt(System.currentTimeMillis());
             return;
         }
-        fetchedPlayerDataMap.put(originalUniqueId, new OnlinePlayerData(originalUniqueId, null, properties, null));
+        fetchedPlayerDataMap.put(originalUniqueId, new OnlinePlayerData(originalUniqueId, null, properties));
     }
 
     public static OnlinePlayerData pullPlayerData(UUID originalUniqueId) {
@@ -105,7 +103,7 @@ public class PlayerDataFetcher {
 
         if (tryFetchProperties) {
             // Try fetch to get profile's properties
-            var data = fetchPlayerData(username, originalUniqueId, "", false, false, true, logger).join();
+            var data = fetchPlayerData(username, originalUniqueId, false, false, true, logger).join();
             if (data.containsFirst()) {
                 var playerData = new PlayerData(
                         originalUniqueId,
@@ -145,7 +143,7 @@ public class PlayerDataFetcher {
         return "PlayerDataFetcher";
     }
 
-    public static void clearCache() {
+    public static void forgetLastService() {
         lastUsedServiceAt = 0;
         lastUsedService = null;
     }
@@ -154,13 +152,12 @@ public class PlayerDataFetcher {
     public static CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> fetchPlayerData(
             @NotNull String username,
             @Nullable UUID uniqueId,
-            @NotNull String remoteAddress,
             boolean cacheFetchedData,
             boolean cacheDatabase,
             boolean forceErrorMessages,
             @Nullable SimplifiedLogger logger
     ) {
-        final var fetcher = new PlayerDataFetcher(username, uniqueId, remoteAddress, logger,
+        final var fetcher = new PlayerDataFetcher(username, uniqueId, logger,
                 cacheFetchedData, cacheDatabase, forceErrorMessages);
 
         return CompletableFuture.supplyAsync(() -> {
@@ -271,7 +268,7 @@ public class PlayerDataFetcher {
     // false - break
     // true - continue
     private boolean disconnectCheckFallback(String message, FallbackUsage fallbackUsage) throws BreakContinuationException {
-        disconnectNoThrow(message); // always set the disconenct message as the latest one
+        disconnectNoThrow(message); // always set the disconnect message as the latest one
         if (service.getUseFallbacks().contains(fallbackUsage)) {
             handleResponse(ServiceStateEvent.PRE_FALLBACK_USE);
             return true;
@@ -303,7 +300,7 @@ public class PlayerDataFetcher {
             if (timeout == 0)
                 timeout = config.getMaxTimeout();
             timeout -= totalExecutionTime;
-            if (timeout <= config.getMinTimeout()) {
+            if (config.getMinTimeout() > 0 && timeout <= config.getMinTimeout()) {
                 if (sendErrorMessages)
                     logger.logWarning(prefix, "Not enough timed out, time-out left - %s, min timeout - %s", null, timeout, config.getMinTimeout());
                 return null;
@@ -638,11 +635,11 @@ public class PlayerDataFetcher {
                 rewriteUniqueId = uniqueId;
 
             if (cache && config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties, remoteAddress);
+                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
                 if (cacheDatabase)
                     database.storeOnlinePlayerCache(fetchedPlayerData);
             } else {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties, null);
+                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
             }
 
             if (sendMessages && !rewriteUniqueId.equals(uniqueId))

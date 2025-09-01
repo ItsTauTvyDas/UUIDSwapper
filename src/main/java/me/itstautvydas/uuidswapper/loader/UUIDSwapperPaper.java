@@ -53,7 +53,6 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
                                 x.getName(), x.getValue(), x.getSignature()
                         ))
                         .toList(),
-                event.getAddress().getHostAddress(),
                 true,
                 null,
                 (message) -> {
