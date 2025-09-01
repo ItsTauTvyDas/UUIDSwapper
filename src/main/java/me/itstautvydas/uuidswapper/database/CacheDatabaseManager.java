@@ -105,7 +105,7 @@ public class CacheDatabaseManager {
                 driver.debug("Connection cached => %s", cacheable.shouldConnectionBeCached());
             }
 
-            if (driver.isDatabase) {
+            if (driver.connectionBased) {
                 try {
                     driver.debug("Trying to create %s table", DriverImplementation.ONLINE_UUID_CACHE_TABLE);
                     driver.createOnlineUuidCacheTable();
