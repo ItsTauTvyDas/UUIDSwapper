@@ -3,14 +3,14 @@ package me.itstautvydas.uuidswapper.data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import me.itstautvydas.uuidswapper.Utils;
+import me.itstautvydas.uuidswapper.json.Jsonable;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 @ToString @Getter @Setter
-public class OnlinePlayerData {
+public class OnlinePlayerData implements Jsonable {
     private final UUID originalUniqueId;
     private UUID onlineUniqueId;
     private List<ProfilePropertyWrapper> properties;
@@ -21,8 +21,11 @@ public class OnlinePlayerData {
         this.originalUniqueId = originalUniqueId;
         this.onlineUniqueId = onlineUniqueId;
         this.properties = properties;
-        this.createdAt = System.currentTimeMillis();
-        this.updatedAt = System.currentTimeMillis();
+    }
+
+    public void updateTime(Long createdAt, Long updatedAt) {
+        this.createdAt = createdAt == null ? System.currentTimeMillis() : createdAt;
+        this.updatedAt = updatedAt == null ? (createdAt == null ? System.currentTimeMillis() : createdAt) : updatedAt;
     }
 
     public boolean isOnlineUniqueId() {
@@ -33,7 +36,9 @@ public class OnlinePlayerData {
         return onlineUniqueId == null ? originalUniqueId : onlineUniqueId;
     }
 
-    public String propertiesToJsonString() {
-        return Utils.DEFAULT_GSON.toJson(properties);
+    public PlayerData toSimpleData(String username) {
+        var data = new PlayerData(originalUniqueId, username, onlineUniqueId);
+        data.setProperties(properties);
+        return data;
     }
 }
