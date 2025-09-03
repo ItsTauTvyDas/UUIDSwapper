@@ -5,8 +5,14 @@ import com.google.gson.annotations.SerializedName;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.*;
-import javax.lang.model.type.*;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.MirroredTypesException;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.Writer;
@@ -27,12 +33,57 @@ import java.util.stream.Collectors;
 @AutoService(Processor.class)
 public class ReadMeProcessor extends AbstractProcessor {
 
+    private final Map<TypeElement, ClassInfo> classes = new LinkedHashMap<>();
+    private final Map<String, String> sectionsToLink = new HashMap<>();
     private Filer filer;
     private String optionName;
     private String descriptionName;
 
-    private final Map<TypeElement, ClassInfo> classes = new LinkedHashMap<>();
-    private final Map<String, String> sectionsToLink = new HashMap<>();
+    private static List<TypeElement> getSuperClassesReverse(TypeElement type, Map<String, String> overwrittenDescriptions) {
+        var list = new ArrayList<TypeElement>();
+        while (true) {
+            var annotation = type.getAnnotation(ReadMeCallSuperClass.class);
+            if (annotation == null)
+                break;
+            if (overwrittenDescriptions != null)
+                for (int i = 0; i < annotation.value().length; i += 2)
+                    overwrittenDescriptions.put(annotation.value()[i], annotation.value()[i + 1]);
+            var superClass = type.getSuperclass();
+            if (superClass.getKind() != TypeKind.DECLARED)
+                break;
+            type = (TypeElement) ((DeclaredType) superClass).asElement();
+            list.add(0, type);
+        }
+        return list;
+    }
+
+    private static String toReadMeSectionName(String input) {
+        var result = input.stripLeading();
+        result = result.toLowerCase();
+        result = result.replaceAll("[\\p{Punct}]", "");
+        result = result.replaceAll("\\s+", "-");
+        return result;
+    }
+
+    private static String applySpaces(String string, int width) {
+        var spaces = width - string.length();
+        if (spaces < 0)
+            return string;
+        return string + " ".repeat(spaces);
+    }
+
+    private static String getJsonSerializedName(VariableElement field) {
+        var serializedName = field.getAnnotation(SerializedName.class);
+        if (serializedName != null && serializedName.value() != null && !serializedName.value().isBlank())
+            return serializedName.value();
+        return null;
+    }
+
+    private static String toKebabCase(String name) {
+        var withSpaces = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replace('_', ' ');
+        var parts = withSpaces.trim().split("\\s+");
+        return Arrays.stream(parts).map(String::toLowerCase).collect(Collectors.joining("-"));
+    }
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -57,7 +108,7 @@ public class ReadMeProcessor extends AbstractProcessor {
             if (title == null)
                 return null;
             classInfo = classes.computeIfAbsent(type, t -> new ClassInfo(
-                    title.value().isBlank() ? t.getSimpleName().toString().replaceAll("([a-z])([A-Z])", "$1 $2") :  title.value(),
+                    title.value().isBlank() ? t.getSimpleName().toString().replaceAll("([a-z])([A-Z])", "$1 $2") : title.value(),
                     description != null ? description.value() : "",
                     title.order(),
                     prefix,
@@ -82,7 +133,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                     descriptionName = overwrittenDescriptions.get(field.getSimpleName().toString());
                 var merge = field.getAnnotation(ReadMeMergeClass.class);
                 if (!disableDescriptions && descriptionName == null && fieldDescription == null && merge == null)
-                        continue;
+                    continue;
 
                 var linkTo = field.getAnnotation(ReadMeLinkTo.class);
 
@@ -168,24 +219,6 @@ public class ReadMeProcessor extends AbstractProcessor {
             }
         }
         return false;
-    }
-
-    private static List<TypeElement> getSuperClassesReverse(TypeElement type, Map<String, String> overwrittenDescriptions) {
-        var list = new ArrayList<TypeElement>();
-        while (true) {
-            var annotation = type.getAnnotation(ReadMeCallSuperClass.class);
-            if (annotation == null)
-                break;
-            if (overwrittenDescriptions != null)
-                for (int i = 0; i < annotation.value().length; i += 2)
-                    overwrittenDescriptions.put(annotation.value()[i], annotation.value()[i + 1]);
-            var superClass = type.getSuperclass();
-            if (superClass.getKind() != TypeKind.DECLARED)
-                break;
-            type = (TypeElement) ((DeclaredType) superClass).asElement();
-            list.add(0, type);
-        }
-        return list;
     }
 
     private String renderMarkdown() {
@@ -314,34 +347,10 @@ public class ReadMeProcessor extends AbstractProcessor {
         return null;
     }
 
-    private static String toReadMeSectionName(String input) {
-        var result = input.stripLeading();
-        result = result.toLowerCase();
-        result = result.replaceAll("[\\p{Punct}]", "");
-        result = result.replaceAll("\\s+", "-");
-        return result;
+    private record ClassInfo(String title, String description, int order, String prefix, List<FieldInfo> fields,
+                             ReadMeTableSettings settings) {
     }
 
-    private static String applySpaces(String string, int width) {
-        var spaces = width - string.length();
-        if (spaces < 0)
-            return string;
-        return string + " ".repeat(spaces);
+    private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className) {
     }
-
-    private static String getJsonSerializedName(VariableElement field) {
-        var serializedName = field.getAnnotation(SerializedName.class);
-        if (serializedName != null && serializedName.value() != null && !serializedName.value().isBlank())
-            return serializedName.value();
-        return null;
-    }
-
-    private static String toKebabCase(String name) {
-        var withSpaces = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2").replace('_', ' ');
-        var parts = withSpaces.trim().split("\\s+");
-        return Arrays.stream(parts).map(String::toLowerCase).collect(Collectors.joining("-"));
-    }
-
-    private record ClassInfo(String title, String description, int order, String prefix, List<FieldInfo> fields, ReadMeTableSettings settings) {}
-    private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className) {}
 }
