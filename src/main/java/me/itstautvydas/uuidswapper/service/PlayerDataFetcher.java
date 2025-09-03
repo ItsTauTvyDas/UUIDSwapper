@@ -2,9 +2,10 @@ package me.itstautvydas.uuidswapper.service;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import lombok.Getter;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
-import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
 import me.itstautvydas.uuidswapper.data.*;
 import me.itstautvydas.uuidswapper.enums.FallbackUsage;
 import me.itstautvydas.uuidswapper.enums.ServiceStateEvent;
@@ -28,12 +29,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public class PlayerDataFetcher {
+    @Getter
     private static final Map<UUID, OnlinePlayerData> fetchedPlayerDataMap = new ConcurrentHashMap<>();
+    @Getter
     private static final Map<UUID, PlayerData> pretendMap = new ConcurrentHashMap<>();
+    @Getter
     private static final Map<UUID, Long> throttledConnections = new ConcurrentHashMap<>();
     private static final HttpClient client;
 
+    @Getter
     private static volatile String lastUsedService;
+    @Getter
     private static volatile long lastUsedServiceAt;
 
     static {
@@ -62,10 +68,10 @@ public class PlayerDataFetcher {
 
     public PlayerDataFetcher(String username, UUID uniqueId, SimplifiedLogger logger,
                              boolean cacheFetchedData, boolean cacheDatabase, boolean forceErrorMessages) {
-        this.config = PluginWrapper.getCurrent().getConfiguration().getOnlineAuthentication();
+        this.config = MultiPlatform.get().getConfiguration().getOnlineAuthentication();
         this.username = username;
         this.uniqueId = Objects.requireNonNullElse(uniqueId, Utils.offlineUniqueIdIfNull(username, uniqueId));
-        this.logger = Objects.requireNonNullElse(logger, PluginWrapper.getCurrent());
+        this.logger = Objects.requireNonNullElse(logger, MultiPlatform.get());
         this.cacheFetchedData = cacheFetchedData;
         this.cacheDatabase = cacheDatabase;
         this.forceErrorMessages = forceErrorMessages;
@@ -126,7 +132,7 @@ public class PlayerDataFetcher {
     }
 
     public static boolean isThrottled(UUID uniqueId, ObjectHolder<Long> timeLeft) {
-        var throttle = PluginWrapper.getCurrent().getConfiguration().getOnlineAuthentication().getServiceConnectionThrottle();
+        var throttle = MultiPlatform.get().getConfiguration().getOnlineAuthentication().getServiceConnectionThrottle();
         throttledConnections.entrySet().removeIf(next -> next.getValue() + throttle <= System.currentTimeMillis());
         if (timeLeft != null) {
             var when = throttledConnections.get(uniqueId);
@@ -341,7 +347,7 @@ public class PlayerDataFetcher {
         var handler = service.executeResponseHandlers(event, placeholders);
         if (handler != null) {
             if (sendDebugMessages)
-                PluginWrapper.getCurrent().logInfo(
+                MultiPlatform.get().logInfo(
                         servicePrefix,
                         "(Debug) Found valid response handler from the configuration ",
                         handler.resultToString()
@@ -505,7 +511,7 @@ public class PlayerDataFetcher {
 
     public boolean fetchService() throws BreakContinuationException {
         Objects.requireNonNull(service);
-        var database = PluginWrapper.getCurrent().getDatabase();
+        var database = MultiPlatform.get().getDatabase();
         placeholders.clear();
 
         placeholders.put("username", username);
@@ -636,8 +642,10 @@ public class PlayerDataFetcher {
 
             if (cache && config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
                 fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
-                if (cacheDatabase)
+                if (cacheDatabase) {
                     database.storeOnlinePlayerCache(fetchedPlayerData);
+                    fetchedPlayerData.updateTime(null, null);
+                }
             } else {
                 fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
             }
