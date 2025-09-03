@@ -175,8 +175,6 @@
       "&eSet player's new username, properties and UUID on next login. Resets after second re-login!",
       "UUID is optional, if not defined, we will try to fetch the UUID from existing services, offline UUID otherwise.&r",
       "  /{command} pretend <new username> [fetch properties?] [new UUID]",
-      "&eDebug plugin internal data.&r",
-      "  /{command} debug",
       "&eTest service. UUID is optional, if empty - offline UUID will be made based on the username.&r",
       "  /{command} test <service> <username> [UUID]"
     ],
@@ -193,7 +191,6 @@
       "{prefix}  New UUID -> &a{new_uuid}",
       "{prefix}Relog in order to log as that player. &cIf you log out from that player, you will get logged back in your original player!"
     ],
-    "player-pretend-failed": "{prefix}&cFailed to pretend a player, check console for full error",
-    "debug-header": "{prefix}&eDebug information"
+    "player-pretend-failed": "{prefix}&cFailed to pretend a player, check console for full error"
   }
 }

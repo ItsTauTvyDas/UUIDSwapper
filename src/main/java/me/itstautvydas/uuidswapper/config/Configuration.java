@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.ToString;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
-import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
 import me.itstautvydas.uuidswapper.database.DriverImplementation;
 import me.itstautvydas.uuidswapper.database.driver.JsonImplementation;
 import me.itstautvydas.uuidswapper.database.driver.MemoryCacheImplementation;
@@ -345,7 +345,7 @@ public class Configuration {
                 } else if (entry.getKey().startsWith("config::")) {
                     try {
                         var jsonValue = Utils.getJsonValue(
-                                PluginWrapper.getCurrent().getRawConfiguration(),
+                                MultiPlatform.get().getRawConfiguration(),
                                 entry.getKey().substring(8)
                         );
                         if (entry.getValue() == null || jsonValue == null) {
@@ -489,7 +489,7 @@ public class Configuration {
     @ToString @Getter
     @ReadMeTitle()
     @ReadMeDescription("""
-            Messages for command output. Placeholders available in all messages:
+            Messages for command outputs. Placeholders available in all messages:
             `{command}` - command name
             `{prefix}` - prefix defined in `prefix`""")
     public static class CommandMessagesConfiguration {
@@ -516,8 +516,6 @@ public class Configuration {
         private String playerPretendSuccess;
         @RequiredProperty @ReadMeDescription("Message when plugin wasn't able to fake another player")
         private String playerPretendFailed;
-        @RequiredProperty @ReadMeDescription("Header message for debug messages")
-        private String debugHeader;
     }
 
     @RequiredProperty
