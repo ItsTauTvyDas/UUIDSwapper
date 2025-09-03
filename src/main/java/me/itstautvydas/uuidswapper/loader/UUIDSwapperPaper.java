@@ -1,32 +1,21 @@
 package me.itstautvydas.uuidswapper.loader;
 
-import com.destroystokyo.paper.profile.ProfileProperty;
-import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
-import me.itstautvydas.uuidswapper.data.ProfilePropertyWrapper;
 import me.itstautvydas.uuidswapper.enums.PlatformType;
-import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
+import me.itstautvydas.uuidswapper.multiplatform.wrapper.PaperPluginWrapper;
 import org.bukkit.Bukkit;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.ArrayList;
-
-public class UUIDSwapperPaper extends JavaPlugin implements Listener {
+public class UUIDSwapperPaper extends JavaPlugin {
     @Override
     public void onLoad() {
-        PluginWrapper.init(PlatformType.PAPER.verifyFolia(), this, Bukkit.getServer(), getLogger(), getDataPath());
+        MultiPlatform.init(PlatformType.PAPER.verifyFolia(), this, Bukkit.getServer(), getLogger(), getDataPath());
     }
 
     @Override
     public void onEnable() {
-        if (PluginWrapper.onPluginEnable()) {
-            Bukkit.getPluginManager().registerEvents(this, this);
+        if (MultiPlatform.onPluginEnable()) {
+            Bukkit.getPluginManager().registerEvents((PaperPluginWrapper)MultiPlatform.get(), this);
         } else {
             getServer().getPluginManager().disablePlugin(this);
         }
@@ -34,51 +23,6 @@ public class UUIDSwapperPaper extends JavaPlugin implements Listener {
 
     @Override
     public void onDisable() {
-        PluginWrapper.onPluginDisable();
-    }
-
-    @EventHandler
-    public void handlePlayerDisconnect(PlayerQuitEvent event) {
-        PluginWrapper.getCurrent().onPlayerDisconnect(event.getPlayer().getName(), event.getPlayer().getUniqueId());
-    }
-
-    @EventHandler
-    public void handlePlayerJoin(AsyncPlayerPreLoginEvent event) {
-        PluginWrapper.getCurrent().onPlayerLogin(
-                event.getName(),
-                event.getUniqueId(),
-                event.getPlayerProfile().getProperties()
-                        .stream()
-                        .map(x -> new ProfilePropertyWrapper(
-                                x.getName(), x.getValue(), x.getSignature()
-                        ))
-                        .toList(),
-                true,
-                null,
-                (message) -> {
-                    if (message.hasMessage()) {
-                        event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
-                        if (message.isTranslatable()) {
-                            event.kickMessage(Component.translatable(message.getMessage()));
-                        } else {
-                            if (PluginWrapper.getCurrent().getConfiguration().getPaper().isUseMiniMessages())
-                                event.kickMessage(MiniMessage.miniMessage().deserialize(message.getMessage()));
-                            else
-                                event.kickMessage(LegacyComponentSerializer.legacy('&').deserialize(message.getMessage()));
-                        }
-                    }
-                }
-        ).join();
-
-        var holder = new BiObjectHolder<>(event.getName(), event.getUniqueId());
-        var properties = new ArrayList<ProfilePropertyWrapper>();
-        if (PluginWrapper.getCurrent().onGameProfileRequest(holder, properties)) {
-            var profile = Bukkit.createProfile(holder.getSecond(), holder.getFirst());
-            profile.setProperties(properties.stream()
-                    .map(x -> new ProfileProperty(
-                            x.getName(), x.getValue(), x.getSignature()
-                    )).toList());
-            event.setPlayerProfile(profile);
-        }
+        MultiPlatform.onPluginDisable();
     }
 }

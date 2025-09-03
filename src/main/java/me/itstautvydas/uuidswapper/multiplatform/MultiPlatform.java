@@ -1,4 +1,4 @@
-package me.itstautvydas.uuidswapper.crossplatform;
+package me.itstautvydas.uuidswapper.multiplatform;
 
 import com.google.gson.*;
 import com.google.gson.internal.LinkedTreeMap;
@@ -7,8 +7,8 @@ import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
-import me.itstautvydas.uuidswapper.crossplatform.wrapper.BungeeCordPluginWrapper;
-import me.itstautvydas.uuidswapper.crossplatform.wrapper.VelocityPluginWrapper;
+import me.itstautvydas.uuidswapper.multiplatform.wrapper.BungeeCordPluginWrapper;
+import me.itstautvydas.uuidswapper.multiplatform.wrapper.VelocityPluginWrapper;
 import me.itstautvydas.uuidswapper.data.Message;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
@@ -39,9 +39,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 @Getter
-public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
+public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     private static final String CONFIGURATION_PREFIX = "Configuration";
-    private static PluginWrapper<?, ?, ?, ?> CURRENT;
+    private static MultiPlatform<?, ?, ?, ?> CURRENT;
     private static SimplifiedLogger CURRENT_LOGGER;
     public static final Gson GSON = new GsonBuilder()
             .setFieldNamingStrategy(f -> {
@@ -70,7 +70,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
 
     public static Object createWrapperInstance(PlatformType type) throws Exception {
         var loaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase()
-                + ".crossplatform.wrapper."
+                + ".multiplatform.wrapper."
                 + type.getName() + "PluginWrapper");
         var constructor = loaderClass.getConstructor();
         return constructor.newInstance();
@@ -80,13 +80,13 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
     public static <P, L, S, M> void init(PlatformType type, P plugin, S serverObject, L loggerObject, Path dataDirectory) {
         if (CURRENT != null)
             throw new RuntimeException("Cross-platform implementation is already done!");
-        PluginWrapper<P, L, S, M> implementation;
+        MultiPlatform<P, L, S, M> implementation;
 
         try {
             implementation = switch (type) {
-                case VELOCITY -> (PluginWrapper<P, L, S, M>) new VelocityPluginWrapper();
-                case BUNGEE -> (PluginWrapper<P, L, S, M>) new BungeeCordPluginWrapper();
-                case PAPER, FOLIA -> (PluginWrapper<P, L, S, M>) createWrapperInstance(type);
+                case VELOCITY -> (MultiPlatform<P, L, S, M>) new VelocityPluginWrapper();
+                case BUNGEE -> (MultiPlatform<P, L, S, M>) new BungeeCordPluginWrapper();
+                case PAPER, FOLIA -> (MultiPlatform<P, L, S, M>) createWrapperInstance(type);
             };
             CURRENT = implementation;
             CURRENT_LOGGER = implementation; // a workaround to get logger when CURRENT might be null
@@ -102,7 +102,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         implementation.onInit();
     }
 
-    public static PluginWrapper<?, ?, ?, ?> getCurrent() {
+    public static MultiPlatform<?, ?, ?, ?> get() {
         return CURRENT;
     }
 
@@ -307,18 +307,50 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         return took;
     }
 
-    public void onPlayerDisconnect(String username, UUID uniqueId) {
+    public void handlePlayerDisconnect(String username, UUID uniqueId) {
         if (playerRandomizer != null)
             playerRandomizer.removeGeneratedPlayer(username, uniqueId);
     }
 
+    /**
+     * Try setting player's connection to offline mode on online/secure server
+     * @param switchToOfflineMode Runnable - set Runnable object for setting online mode to false,
+     *                            null - no offline support on online/secure servers
+     * @param disconnectHandler Disconnect handler (can be null)
+     */
+    public void tryForceOfflineMode(
+            @Nullable Runnable switchToOfflineMode,
+            @Nullable Consumer<Message> disconnectHandler
+    ) {
+        if (!configuration.getOnlineAuthentication().isEnabled())
+            return;
+        if (configuration.getOnlineAuthentication().isAllowOfflinePlayers() && MultiPlatform.get().isServerOnlineMode()) {
+            if (switchToOfflineMode == null) {
+                if (disconnectHandler != null)
+                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true));
+                return;
+            }
+            switchToOfflineMode.run();
+        }
+    }
+
+    /**
+     * @param username Original username
+     * @param uniqueId Original unique ID
+     * @param properties Properties to override
+     * @param cacheFetchedData Should the fetched data be cached?
+     * @param switchToOfflineMode Runnable - set Runnable object for setting online mode to false,
+     *                            null - no offline support on online/secure servers
+     * @param disconnectHandler Disconnect handler
+     * @return Completable future for async
+     */
     @NotNull
-    public CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> onPlayerLogin(
+    public CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> handlePlayerLogin(
             @NotNull String username,
             @Nullable UUID uniqueId,
             @Nullable List<ProfilePropertyWrapper> properties,
             boolean cacheFetchedData,
-            @Nullable Runnable switchToOfflineMode,
+            @Nullable Object switchToOfflineMode,
             @NotNull Consumer<Message> disconnectHandler) {
         // I don't want to deal with nulls, passing completed future with null inside
         var dummy = CompletableFuture.completedFuture((BiObjectHolder<OnlinePlayerData, Message>)null);
@@ -326,14 +358,10 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         if (playerRandomizer == null) {
             if (!configuration.getOnlineAuthentication().isEnabled())
                 return dummy;
-
-            if (PluginWrapper.getCurrent().isServerOnlineMode()) {
-                if (switchToOfflineMode == null) {
-                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true));
-                    return dummy;
-                }
-                switchToOfflineMode.run();
-            }
+            if (switchToOfflineMode == null)
+                tryForceOfflineMode(null, disconnectHandler);
+            else if (switchToOfflineMode instanceof Runnable runnable)
+                tryForceOfflineMode(runnable, disconnectHandler);
         } else {
             playerRandomizer.removeGeneratedPlayer(uniqueId);
             if (configuration.getPlayerRandomizer().getUsernameSettings().isRandomize()) {
@@ -359,7 +387,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             if (!offlineUuid.equals(uniqueId)) {
                 boolean fetchForProperties = false;
                 if (configuration.getOnlineAuthentication().isSendMessagesToConsole()) {
-                    PluginWrapper.getCurrent().logInfo("PlayerDataFetcher", "Player %s connected with premium account, skipping fetching.", username, uniqueId);
+                    MultiPlatform.get().logInfo("PlayerDataFetcher", "Player %s connected with premium account, skipping fetching.", username, uniqueId);
                     if (playerRandomizer != null && configuration.getPlayerRandomizer().isUseProperties()) {
                         if (properties != null)
                             PlayerDataFetcher.setPlayerProperties(uniqueId, properties);
@@ -414,7 +442,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         });
     }
 
-    public boolean onGameProfileRequest(
+    public boolean handleGameProfileRequest(
             @NotNull BiObjectHolder<String, UUID> profile,
             @NotNull List<ProfilePropertyWrapper> properties
     ) {
@@ -511,7 +539,7 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         return new SimplifiedLogger() {
             @SuppressWarnings("unchecked")
             void sendMessage(String message, Object... args) {
-                ((PluginWrapper<?, ?, ?, M>) PluginWrapper.getCurrent()).sendMessage(
+                ((MultiPlatform<?, ?, ?, M>) MultiPlatform.get()).sendMessage(
                         messageAcceptor,
                         x -> message.formatted(args),
                         null
@@ -526,13 +554,13 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
             @Override
             public void logWarning(String prefix, String message, Throwable exception, Object... args) {
                 sendMessage(Utils.toLoggerMessage(prefix, message, args));
-                Utils.printException(exception, x -> PluginWrapper.getCurrent().logWarning(prefix, x, null));
+                Utils.printException(exception, x -> MultiPlatform.get().logWarning(prefix, x, null));
             }
 
             @Override
             public void logError(String prefix, String message, Throwable exception, Object... args) {
                 sendMessage(Utils.toLoggerMessage(prefix, message, args));
-                Utils.printException(exception, x -> PluginWrapper.getCurrent().logError(prefix, x, null));
+                Utils.printException(exception, x -> MultiPlatform.get().logError(prefix, x, null));
             }
         };
     }
@@ -565,12 +593,76 @@ public abstract class PluginWrapper<P, L, S, M> implements SimplifiedLogger {
         }
     }
 
+    protected enum DebugCommandCacheType {
+        PLAYER_DATA_FETCHER_FETCHED,
+        PLAYER_DATA_FETCHER_PRETEND,
+        PLAYER_DATA_FETCHER_THROTTLED,
+        PLAYER_DATA_FETCHER_LAST_SERVICE,
+        DATABASE_FETCHED_PLAYERS,
+        DATABASE_RANDOM_PLAYERS
+    }
+
+    protected String getDebugMessage(DebugCommandCacheType type) {
+        return switch (type) {
+            case PLAYER_DATA_FETCHER_FETCHED, PLAYER_DATA_FETCHER_PRETEND -> {
+                var str = type == DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED ?
+                        "[PlayerDataFetcher.class] UUID -> OnlinePlayerData.class"
+                        : "[PlayerDataFetcher.class] UUID -> PlayerData.class";
+                var map = type == DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED ?
+                        PlayerDataFetcher.getFetchedPlayerDataMap()
+                        : PlayerDataFetcher.getPretendMap();
+                var it = map.entrySet().iterator();
+                if (!it.hasNext())
+                    yield str + "\n<no cached data>";
+                for (int i = 1; it.hasNext(); i++) {
+                    var entry = it.next();
+                    var json = entry.getValue().toJson();
+                    List<ProfilePropertyWrapper> properties;
+                    if (type == DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED)
+                        properties = ((OnlinePlayerData)entry.getValue()).getProperties();
+                    else
+                        properties = ((PlayerData)entry.getValue()).getProperties();
+                    if (properties != null) // Properties are too long and useless to even show it
+                        json.addProperty("properties", "<valid properties>");
+                    else
+                        json.addProperty("properties", "<not set>");
+                    str += "\n%s# %s: &e%s&r".formatted(i, entry.getKey(), json);
+                }
+                yield str;
+            }
+            case PLAYER_DATA_FETCHER_THROTTLED -> {
+                var str = "[PlayerDataFetcher.class] UUID -> time in milliseconds (long)";
+                var it = PlayerDataFetcher.getThrottledConnections().entrySet().iterator();
+                if (!it.hasNext())
+                    yield str + "\n<no cached data>";
+                for (int i = 1; it.hasNext(); i++) {
+                    var entry = it.next();
+                    str += "\n%s# %s: &e%s&r".formatted(i, entry.getKey(), entry.getValue());
+                }
+                yield str;
+            }
+            case PLAYER_DATA_FETCHER_LAST_SERVICE -> """
+                    [PlayerDataFetcher.class]
+                    Last used service -> &e%s&r
+                    Last used at -> %s""".formatted(
+                            PlayerDataFetcher.getLastUsedService(),
+                            PlayerDataFetcher.getLastUsedServiceAt()
+                    );
+            case DATABASE_FETCHED_PLAYERS -> {
+                yield null;
+            }
+            case DATABASE_RANDOM_PLAYERS -> {
+                yield null;
+            }
+        };
+    }
+
     public void onPretendCommand(M messageAcceptor, UUID originalUniqueId, UUID uniqueId, String username,
                                  boolean tryFetchProperties, Consumer<Runnable> async) {
         async.accept(() -> {
             PlayerData data;
             boolean fetch = tryFetchProperties;
-            if (fetch && PluginWrapper.getCurrent()
+            if (fetch && MultiPlatform.get()
                     .getConfiguration()
                     .getOnlineAuthentication()
                     .getServices()

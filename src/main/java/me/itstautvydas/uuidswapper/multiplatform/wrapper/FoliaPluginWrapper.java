@@ -1,8 +1,8 @@
-package me.itstautvydas.uuidswapper.crossplatform.wrapper;
+package me.itstautvydas.uuidswapper.multiplatform.wrapper;
 
 import io.papermc.paper.threadedregions.scheduler.AsyncScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import me.itstautvydas.uuidswapper.crossplatform.PluginTaskWrapper;
+import me.itstautvydas.uuidswapper.multiplatform.PluginTaskWrapper;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.concurrent.TimeUnit;
