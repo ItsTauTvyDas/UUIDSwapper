@@ -24,6 +24,7 @@ public class Utils {
     public final String RELOAD_COMMAND_PERMISSION = "uuidswapper.command.reload";
     public final String DEBUG_COMMAND_PERMISSION = "uuidswapper.command.debug";
     public final String PRETEND_COMMAND_PERMISSION = "uuidswapper.command.pretend";
+    public final String TEST_COMMAND_PERMISSION = "uuidswapper.command.test-service";
 
     public final String GENERIC_DISCONNECT_MESSAGE_ID = "multiplayer.disconnect.generic";
 
