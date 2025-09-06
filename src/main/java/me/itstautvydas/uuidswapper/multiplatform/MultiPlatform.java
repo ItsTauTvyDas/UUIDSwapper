@@ -7,6 +7,7 @@ import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
+import me.itstautvydas.uuidswapper.database.DriverImplementation;
 import me.itstautvydas.uuidswapper.multiplatform.wrapper.BungeeCordPluginWrapper;
 import me.itstautvydas.uuidswapper.multiplatform.wrapper.VelocityPluginWrapper;
 import me.itstautvydas.uuidswapper.data.Message;
@@ -43,19 +44,8 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     private static final String CONFIGURATION_PREFIX = "Configuration";
     private static MultiPlatform<?, ?, ?, ?> CURRENT;
     private static SimplifiedLogger CURRENT_LOGGER;
+
     public static final Gson GSON = new GsonBuilder()
-            .setFieldNamingStrategy(f -> {
-                String fieldName = f.getName();
-                StringBuilder sb = new StringBuilder();
-                for (char c : fieldName.toCharArray()) {
-                    if (Character.isUpperCase(c)) {
-                        sb.append('-').append(Character.toLowerCase(c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-                return sb.toString();
-            })
             .setPrettyPrinting()
             .disableHtmlEscaping()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_DASHES)
@@ -244,14 +234,12 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     }
 
     public void onEnable() {
-        if (database != null)
-            database.resetTimer();
         registerCommand((BuildConstants.NAME + "-" + platformType.getName()).toLowerCase());
     }
 
     public void onDisable() {
         if (database != null)
-            database.shutdown();
+            database.clear();
     }
 
     private void logSwappedUuid(Map.Entry<String, String> entry) {
@@ -487,7 +475,7 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         if (configuration.getOnlineAuthentication().isEnabled()) {
             var fetched = PlayerDataFetcher.pullPlayerData(profile.getSecond());
             if (fetched != null) {
-                profile.setSecond(fetched.getOnlineUniqueId());
+                profile.setSecond(fetched.getUniqueId());
                 if (fetched.getProperties() != null)
                     properties.addAll(fetched.getProperties());
                 changed = true;
@@ -574,15 +562,14 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         var old = configuration;
         var old0 = rawConfiguration;
         try {
-            PlayerDataFetcher.forgetLastService();
+            PlayerDataFetcher.forgetLastUsedService();
             var took = reloadConfiguration();
             placeholders.put("took", took);
-            database.clearConnection();
+            database.clear();
             if (!database.loadDriverFromConfiguration()) {
                 placeholders.put("driver", database.getDriver());
                 sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadDatabaseDriverFailed, placeholders);
             }
-            database.resetTimer();
             sendMessage(messageAcceptor, Configuration.CommandMessagesConfiguration::getReloadSuccess, placeholders);
         } catch (Exception ex) {
             configuration = old;
@@ -602,7 +589,31 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         DATABASE_RANDOM_PLAYERS
     }
 
+    private String playerDataJson(Jsonable object, int counter, Object key) {
+        var json = object.toJson();
+        json.remove("original-unique-id");
+        String str = "";
+        List<ProfilePropertyWrapper> properties;
+        if (object instanceof OnlinePlayerData data)
+            properties = data.getProperties();
+        else if (object instanceof PlayerData data)
+            properties = data.getProperties();
+        else
+            return "<unknown player data object>";
+        if (properties != null) // Properties are too long and useless to even show it
+            json.addProperty("properties", "<valid properties>");
+        else
+            json.addProperty("properties", "<not set>");
+        str += "\n%s# %s: &e%s&r".formatted(counter, key, json);
+        return str;
+    }
+
+    @SuppressWarnings("DuplicatedCode")
     protected String getDebugMessage(DebugCommandCacheType type) {
+        DriverImplementation driver = null;
+        if (getDatabase().isDriverRunning())
+            driver = getDatabase().getDriver();
+
         return switch (type) {
             case PLAYER_DATA_FETCHER_FETCHED, PLAYER_DATA_FETCHER_PRETEND -> {
                 var str = type == DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED ?
@@ -616,17 +627,7 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
                     yield str + "\n<no cached data>";
                 for (int i = 1; it.hasNext(); i++) {
                     var entry = it.next();
-                    var json = entry.getValue().toJson();
-                    List<ProfilePropertyWrapper> properties;
-                    if (type == DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED)
-                        properties = ((OnlinePlayerData)entry.getValue()).getProperties();
-                    else
-                        properties = ((PlayerData)entry.getValue()).getProperties();
-                    if (properties != null) // Properties are too long and useless to even show it
-                        json.addProperty("properties", "<valid properties>");
-                    else
-                        json.addProperty("properties", "<not set>");
-                    str += "\n%s# %s: &e%s&r".formatted(i, entry.getKey(), json);
+                    str += playerDataJson(entry.getValue(), i, entry.getKey());
                 }
                 yield str;
             }
@@ -649,10 +650,36 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
                             PlayerDataFetcher.getLastUsedServiceAt()
                     );
             case DATABASE_FETCHED_PLAYERS -> {
-                yield null;
+                if (driver == null)
+                    yield "Database (driver) is not running!";
+                var databaseObject = getDatabase().getOnlinePlayersCache();
+                if (databaseObject.hasError())
+                    yield "\n<error: " + databaseObject.exception.getMessage() + ">";
+                var str = "[" + driver.getClass().getName() + "] UUID -> OnlinePlayerData.class\n";
+                var it = databaseObject.object.iterator();
+                if (!it.hasNext())
+                    yield str + "\n<no cached data>";
+                for (int i = 1; it.hasNext(); i++) {
+                    var player = it.next();
+                    str += playerDataJson(player, i, player.getOriginalUniqueId());
+                }
+                yield str;
             }
             case DATABASE_RANDOM_PLAYERS -> {
-                yield null;
+                if (driver == null)
+                    yield "Database (driver) is not running!";
+                var databaseObject = getDatabase().getRandomPlayersCache();
+                if (databaseObject.hasError())
+                    yield "\n<error: " + databaseObject.exception.getMessage() + ">";
+                var str = "[" + driver.getClass().getName() + "] UUID -> PlayerData.class\n";
+                var it = databaseObject.object.iterator();
+                if (!it.hasNext())
+                    yield str + "\n<no cached data>";
+                for (int i = 1; it.hasNext(); i++) {
+                    var player = it.next();
+                    str += playerDataJson(player, i, player.getOriginalUniqueId());
+                }
+                yield str;
             }
         };
     }
@@ -685,4 +712,5 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     public abstract void registerCommand(String commandName);
     public abstract boolean isServerOnlineMode();
     public abstract PluginTaskWrapper scheduleTask(Runnable run, @Nullable Long repeatInSeconds, long delayInSeconds);
+    public abstract PluginTaskWrapper scheduleTaskAsync(Runnable run);
 }
