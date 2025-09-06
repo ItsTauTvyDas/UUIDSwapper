@@ -3,6 +3,7 @@ package me.itstautvydas.uuidswapper.data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import me.itstautvydas.uuidswapper.database.Queueable;
 import me.itstautvydas.uuidswapper.json.Jsonable;
 
 import java.util.List;
@@ -10,7 +11,7 @@ import java.util.UUID;
 
 @RequiredArgsConstructor
 @Getter
-public class PlayerData implements Jsonable {
+public class PlayerData implements Jsonable, Queueable {
     private final UUID originalUniqueId;
     private final String username;
     private final UUID uniqueId;
