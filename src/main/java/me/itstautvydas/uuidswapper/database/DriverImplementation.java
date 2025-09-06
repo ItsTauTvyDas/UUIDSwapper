@@ -1,8 +1,10 @@
 package me.itstautvydas.uuidswapper.database;
 
+import com.google.gson.annotations.SerializedName;
 import lombok.Getter;
 import me.itstautvydas.uuidswapper.config.Configuration;
-import me.itstautvydas.uuidswapper.crossplatform.PluginWrapper;
+import me.itstautvydas.uuidswapper.json.Jsonable;
+import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
 import me.itstautvydas.uuidswapper.json.PostProcessable;
@@ -14,6 +16,7 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
 
@@ -22,7 +25,7 @@ import java.util.function.BiFunction;
         // JSON's class field is only used in DriverPolymorphicAdapterFactory, no need to have it in the class itself
         "class", "(Do not edit unless you are implementing your own driver!!!) Driver class path to load and initiate for later use, if class is defined without a package, it's treated as built-in one", "String"
 })
-public abstract class DriverImplementation implements PostProcessable {
+public abstract class DriverImplementation implements PostProcessable, Jsonable {
     public static final String CREATED_AT = "created_at";
     public static final String UPDATED_AT = "updated_at";
 
@@ -36,55 +39,55 @@ public abstract class DriverImplementation implements PostProcessable {
     public static final String RANDOM_PLAYER_CACHE_USERNAME = "username";
     public static final String RANDOM_PLAYER_CACHE_UUID = "uuid";
 
+    @SerializedName("name")
     @ReadMeDescription("Name of the driver")
     private String name; // Expose this to GSON
     private transient String prefix;
 
     protected transient boolean supportsCaching;
-    protected transient boolean connectionBased;
 
     @Override
     public void postProcessed() {
         this.prefix = "DatabaseManager/" + name;
     }
 
-    public static Path getDriverPath(DriverImplementation driver) {
-        return PluginWrapper.getCurrent().getDriversDirectory().resolve(driver.name.replace(" ", "_") + ".jar");
+    public Path getDriverPath() {
+        return MultiPlatform.get().getDriversDirectory().resolve(name.replace(" ", "_") + ".jar");
     }
 
-    public static boolean downloadDriver(DriverImplementation driver, boolean enabled, String downloadUrl) {
-        var driverPath = getDriverPath(driver);
+    protected boolean downloadDriver(boolean enabled, String downloadUrl) {
+        var driverPath = getDriverPath();
         if (!Files.exists(driverPath)) {
             if (!enabled) {
-                driver.info(
+                error(
                         "Driver's file doesn't exist (/drivers/%s) and download function is disabled!",
                         null, driverPath.getFileName()
                 );
                 return false;
             }
             if (downloadUrl == null) {
-                driver.info(
+                error(
                         "Can't download driver, no link provided either by driver's driver author or in the configuration",
                         null, driverPath.getFileName()
                 );
                 return false;
             }
-            driver.info("Downloading %s...", driverPath.getFileName());
+            info("Downloading %s...", driverPath.getFileName());
             try (var in = new URL(downloadUrl).openStream()) {
                 Files.copy(in, driverPath, StandardCopyOption.REPLACE_EXISTING);
-                driver.info("Driver successfully downloaded! Saved as /drivers/%s", driverPath.getFileName());
+                info("Driver successfully downloaded! Saved as /drivers/%s", driverPath.getFileName());
             } catch (Exception ex) {
-                driver.info("Failed to download driver from %s!", ex, downloadUrl);
+                error("Failed to download driver from %s!", ex, downloadUrl);
                 return false;
             }
         } else {
-            driver.info("Driver was found, loading %s", driverPath.getFileName());
+            info("Driver was found, loading %s", driverPath.getFileName());
         }
         return true;
     }
 
-    public static boolean loadClass(DriverImplementation driver, String classToLoad, BiFunction<ClassLoader, Class<?>, Exception> onJarLoaded) {
-        var driverPath = getDriverPath(driver);
+    protected boolean loadClass(String classToLoad, BiFunction<ClassLoader, Class<?>, Exception> onJarLoaded) {
+        var driverPath = getDriverPath();
         try {
             var loader = new URLClassLoader(
                     new URL[] {
@@ -95,7 +98,7 @@ public abstract class DriverImplementation implements PostProcessable {
             if (classToLoad != null) {
                 var driverClass = Class.forName(classToLoad, true, loader);
                 var exception = onJarLoaded.apply(loader, driverClass);
-                driver.info("%s class loaded", classToLoad);
+                info("%s class loaded", classToLoad);
                 if (exception != null)
                     throw exception;
                 return true;
@@ -105,28 +108,27 @@ public abstract class DriverImplementation implements PostProcessable {
                 throw exception;
             return true;
         } catch (Exception ex) {
-            driver.info("Failed to load %s!", ex, driverPath);
+            error("Failed to load %s!", ex, driverPath);
             return false;
         }
-    }
-
-    public final boolean shouldCreateNewConnection(Object connection) {
-        debug("Trying to open new connection");
-        if (this instanceof CacheableConnectionDriverImplementation cacheable && cacheable.shouldConnectionBeCached())
-            getManager().resetCounter();
-        return connection == null;
     }
 
     public void debug(String message, Object ...args) {
         if (!getConfiguration().isDebugEnabled())
             return;
-        PluginWrapper.getCurrent().logInfo(prefix, "[DEBUG] " + message, args);
+        MultiPlatform.get().logInfo(prefix, "[DEBUG] " + message, args);
     }
 
     public void info(String message, Object ...args) {
         if (!getConfiguration().isDebugEnabled())
             return;
-        PluginWrapper.getCurrent().logInfo(prefix, message, args);
+        MultiPlatform.get().logInfo(prefix, message, args);
+    }
+
+    public void error(String message, Throwable throwable, Object ...args) {
+        if (!getConfiguration().isDebugEnabled())
+            return;
+        MultiPlatform.get().logError(prefix, message, throwable, args);
     }
 
     public Configuration.DatabaseConfiguration getConfiguration() {
@@ -134,18 +136,18 @@ public abstract class DriverImplementation implements PostProcessable {
     }
 
     public final CacheDatabaseManager getManager() {
-        return PluginWrapper.getCurrent().getDatabase();
+        return MultiPlatform.get().getDatabase();
     }
 
     public abstract boolean init() throws Exception;
-    public abstract boolean clearConnection() throws Exception;
-    public abstract boolean isConnectionClosed() throws Exception;
-
-    public abstract void createOnlineUuidCacheTable() throws Exception;
-    public abstract void createRandomizedPlayerDataTable() throws Exception;
+    public abstract void clean();
+    public abstract boolean isRunning();
 
     public abstract void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception;
     public abstract OnlinePlayerData getOnlinePlayerCache(UUID uuid) throws Exception;
+
+    public abstract List<OnlinePlayerData> getOnlinePlayersCache() throws Exception;
+    public abstract List<PlayerData> getRandomPlayersCache() throws Exception;
 
     public abstract void storeRandomPlayerCache(PlayerData player) throws Exception;
     public abstract PlayerData getRandomPlayerCache(UUID uuid) throws Exception;
