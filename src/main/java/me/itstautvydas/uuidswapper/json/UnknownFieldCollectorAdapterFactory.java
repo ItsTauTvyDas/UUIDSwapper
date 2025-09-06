@@ -2,11 +2,13 @@ package me.itstautvydas.uuidswapper.json;
 
 import com.google.gson.*;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.internal.Streams;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import me.itstautvydas.uuidswapper.config.ConfigurationErrorCollector;
+import me.itstautvydas.uuidswapper.database.DriverImplementation;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -33,9 +35,8 @@ public class UnknownFieldCollectorAdapterFactory implements TypeAdapterFactory {
                 || Collection.class.isAssignableFrom(raw)
                 || raw.getName().startsWith("java.")
                 || raw.getName().startsWith("javax.")
-                || raw.getName().startsWith("jdk.")) {
+                || raw.getName().startsWith("jdk."))
             return null;
-        }
 
         var delegate = gson.getDelegateAdapter(this, type);
         var validFields = collectValidFieldNames(raw);
@@ -61,20 +62,19 @@ public class UnknownFieldCollectorAdapterFactory implements TypeAdapterFactory {
 
                 var obj = new JsonObject();
                 var unknowns = collectsUnknown ? new LinkedHashMap<String, Object>() : null;
+                var collector = ConfigurationErrorCollector.startCollecting(gson);
 
                 in.beginObject();
                 while (in.hasNext()) {
-                    String name = in.nextName();
-                    JsonElement value = com.google.gson.internal.Streams.parse(in);
+                    var name = in.nextName();
+                    var value = Streams.parse(in);
 
                     if (!validFields.contains(name)) {
                         var simple = tryGetSimpleValue(value);
                         if (unknowns != null && simple != null)
                             unknowns.put(name, simple);
                         else
-                            ConfigurationErrorCollector.collect(
-                                    gson, ConfigurationErrorCollector.UNKNOWN_PROPERTY, name, in, false
-                            );
+                            collector.collect(ConfigurationErrorCollector.UNKNOWN_PROPERTY, name, in, false);
                     }
                     obj.add(name, value);
                 }
@@ -83,6 +83,11 @@ public class UnknownFieldCollectorAdapterFactory implements TypeAdapterFactory {
                 var result = delegate.fromJsonTree(obj);
                 if (collectsUnknown && result instanceof UnknownFieldCollector ufc)
                     ufc.unknownFields = unknowns;
+                else if (result instanceof DriverImplementation)
+                    // class is not an actual field, it's only used in an adapter factory for registering driver
+                    collector.push(str -> !str.equals(DriverPolymorphicAdapterFactory.CLASS_INDICATOR_FIELD_NAME));
+                else
+                    collector.push(null);
                 return result;
             }
         };
@@ -123,10 +128,10 @@ public class UnknownFieldCollectorAdapterFactory implements TypeAdapterFactory {
         return names;
     }
 
-    private static String toKebabCase(String s) {
-        var builder = new StringBuilder(s.length() + 4);
-        for (int i = 0; i < s.length(); i++) {
-            char ch = s.charAt(i);
+    private static String toKebabCase(String string) {
+        var builder = new StringBuilder(string.length() + 4);
+        for (int i = 0; i < string.length(); i++) {
+            char ch = string.charAt(i);
             if (Character.isUpperCase(ch))
                 builder.append('-').append(Character.toLowerCase(ch));
             else
