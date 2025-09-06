@@ -103,6 +103,16 @@ public class VelocityPluginWrapper extends MultiPlatform<UUIDSwapperVelocity, Lo
         };
     }
 
+    @Override
+    public PluginTaskWrapper scheduleTaskAsync(Runnable run) {
+        return new PluginTaskWrapper(server.getScheduler().buildTask(handle, run).schedule()) {
+            @Override
+            public void cancel() {
+                ((ScheduledTask)handle).cancel();
+            }
+        };
+    }
+
     @Subscribe
     public void handlePlayerDisconnect(DisconnectEvent event) {
         handlePlayerDisconnect(event.getPlayer().getUsername(), event.getPlayer().getUniqueId());

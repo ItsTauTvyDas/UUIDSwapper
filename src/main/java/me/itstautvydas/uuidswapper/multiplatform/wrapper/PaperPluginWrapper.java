@@ -139,6 +139,15 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Serv
         };
     }
 
+    @Override
+    public PluginTaskWrapper scheduleTaskAsync(Runnable run) {
+        return new PluginTaskWrapper(server.getScheduler().runTaskAsynchronously(handle, run)) {
+            @Override
+            public void cancel() {
+                ((BukkitTask)handle).cancel();
+            }
+        };
+    }
 
     @EventHandler
     public void handlePlayerDisconnect(PlayerQuitEvent event) {

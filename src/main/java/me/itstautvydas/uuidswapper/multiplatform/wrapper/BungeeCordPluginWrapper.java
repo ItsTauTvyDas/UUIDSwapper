@@ -66,6 +66,16 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
         };
     }
 
+    @Override
+    public PluginTaskWrapper scheduleTaskAsync(Runnable run) {
+        return new PluginTaskWrapper(server.getScheduler().runAsync(handle, run)) {
+            @Override
+            public void cancel() {
+                ((ScheduledTask)handle).cancel();
+            }
+        };
+    }
+
     @EventHandler
     public void handlePlayerDisconnect(PlayerDisconnectEvent event) {
         handlePlayerDisconnect(event.getPlayer().getName(), event.getPlayer().getUniqueId());
@@ -134,7 +144,7 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
                     );
                     constructor.setAccessible(true);
                     loginProfile = constructor.newInstance(
-                            (uniqueId != null ? uniqueId : connection.getUniqueId()).toString().replace("-", ""),
+                            Utils.toDashlessUniqueId(uniqueId != null ? uniqueId : connection.getUniqueId()),
                             newUsername != null ? newUsername : connection.getName(),
                             convertProperties(properties)
                     );
