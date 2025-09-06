@@ -10,7 +10,7 @@ import me.itstautvydas.uuidswapper.database.DriverImplementation;
 import java.io.IOException;
 
 public class DriverPolymorphicAdapterFactory implements TypeAdapterFactory {
-    private static final String CLASS_INDICATOR_FIELD_NAME = "class";
+    public static final String CLASS_INDICATOR_FIELD_NAME = "class";
     private static final String DEFAULT_PACKAGE = "me.itstautvydas.uuidswapper.database.driver";
 
     @Override
@@ -22,7 +22,8 @@ public class DriverPolymorphicAdapterFactory implements TypeAdapterFactory {
         TypeAdapter<JsonElement> elementAdapter = gson.getAdapter(JsonElement.class);
 
         return (TypeAdapter<T>) new TypeAdapter<DriverImplementation>() {
-            @Override public void write(JsonWriter out, DriverImplementation value) throws IOException {
+            @Override
+            public void write(JsonWriter out, DriverImplementation value) throws IOException {
                 TypeAdapter<DriverImplementation> delegate = gson.getDelegateAdapter(
                         DriverPolymorphicAdapterFactory.this,
                         TypeToken.get(DriverImplementation.class)
@@ -30,7 +31,8 @@ public class DriverPolymorphicAdapterFactory implements TypeAdapterFactory {
                 delegate.write(out, value);
             }
 
-            @Override public DriverImplementation read(JsonReader in) throws IOException {
+            @Override
+            public DriverImplementation read(JsonReader in) throws IOException {
                 JsonObject obj = elementAdapter.read(in).getAsJsonObject();
 
                 JsonElement discEl = obj.get(CLASS_INDICATOR_FIELD_NAME);
