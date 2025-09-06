@@ -38,6 +38,13 @@ public class Utils {
 
     public final Gson DEFAULT_GSON = new GsonBuilder()
             .disableHtmlEscaping()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_DASHES)
+            .create();
+
+    public final Gson DEFAULT_PRETTY_GSON = new GsonBuilder()
+            .disableHtmlEscaping()
+            .setPrettyPrinting()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_DASHES)
             .create();
 
     public static boolean isValidUuid(String uuid) {
@@ -191,6 +198,10 @@ public class Utils {
             );
         }
         return UUID.fromString(uniqueId);
+    }
+
+    public String toDashlessUniqueId(UUID uniqueId) {
+        return uniqueId.toString().replace("-", "");
     }
 
     // https://stackoverflow.com/questions/34092373/merge-extend-json-objects-using-gson-in-java
