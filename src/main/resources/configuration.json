@@ -143,26 +143,28 @@
       "randomize": true,
       "out-of-usernames-disconnect-message": "&cWe seem to hit the limit of random available usernames!",
       "save": false,
+      "expire": -1,
       "from-length": 3,
       "to-length": 16,
       "characters": "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM123456789_"
     },
     "unique-id": {
       "randomize": true,
-      "save": false
+      "save": false,
+      "expire": -1
     }
   },
   "swapped-unique-ids": {
     "enabled": false,
     "swap": {
-      "u:Notch": "00000000-0000-0000-0000-000000000000",
+      "Notch": "00000000-0000-0000-0000-000000000000",
       "00000000-0000-0000-0000-000000000000": "00000000-0000-0000-0000-000000000001"
     }
   },
   "swapped-player-names": {
     "enabled": false,
     "swap": {
-      "u:Notch": "Herobrine",
+      "Notch": "Herobrine",
       "00000000-0000-0000-0000-000000000000": "jeb_"
     }
   },

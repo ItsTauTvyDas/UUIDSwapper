@@ -92,7 +92,7 @@ public class Configuration {
         private boolean sendMessagesToConsole = true;
         @ReadMeDescription("Send plugin error messages")
         private boolean sendErrorMessagesToConsole = true;
-        @ReadMeDescription("How much time to wait before requesting already used service")
+        @ReadMeDescription("How much time to wait (milliseconds) before requesting already used service")
         private long serviceConnectionThrottle = 5000;
         @RequiredProperty
         @ReadMeDescription("Connection throttled disconnect message")
@@ -133,7 +133,7 @@ public class Configuration {
         @RequiredProperty
         @ReadMeDescription("Should fetched data be saved")
         private boolean enabled;
-        @ReadMeDescription("Player data expiration time in minutes")
+        @ReadMeDescription("Player data expiration time (minutes)")
         private long keepTime = 7200;
     }
 
@@ -414,7 +414,7 @@ public class Configuration {
     @ReadMeDescription("Randomize player's username and UUID. This will be prioritized if online authentication is " +
             "enabled (it also depends if `fetch-properties-from-services` is enabled)!")
     public static class RandomizerConfiguration {
-        @Getter
+        @ToString() @Getter
         public static class UniqueIdRandomizer {
             @RequiredProperty
             @ReadMeDescription("Should plugin randomize player's unique ID (UUID)")
@@ -422,12 +422,16 @@ public class Configuration {
             @RequiredProperty
             @ReadMeDescription("Should player's random unique ID be remembered")
             private boolean save;
+            @RequiredProperty
+            @ReadMeDescription("When should saved unique ID expire (seconds)")
+            private boolean expire;
         }
 
         @ToString(callSuper = true) @Getter
         @ReadMeCallSuperClass({
                 "randomize", "Should plugin randomize player's username",
-                "save", "Should player's random username be remembered."
+                "save", "Should player's random username be remembered.",
+                "expire", "When should saved username expire (seconds)"
         })
         public static class UsernameRandomizer extends UniqueIdRandomizer {
             @RequiredProperty
