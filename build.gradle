@@ -152,8 +152,8 @@ project.eclipse.synchronizationTasks(generateTemplates)
 // Compile Paper/Folia plugin classes with Java 21
 sourceSets.main.java {
     exclude "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java",
-            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java",
-            "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/FoliaPluginWrapper.java"
+            "me/itstautvydas/${project.name.toLowerCase()}/multiplatform/wrapper/PaperPluginWrapper.java",
+            "me/itstautvydas/${project.name.toLowerCase()}/multiplatform/wrapper/FoliaPluginWrapper.java"
 }
 
 sourceSets {
@@ -161,7 +161,7 @@ sourceSets {
         java {
             srcDir "src/main/java"
             include "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java"
-            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/multiplatform/wrapper/PaperPluginWrapper.java"
         }
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
@@ -170,8 +170,8 @@ sourceSets {
         java {
             srcDir "src/main/java"
             include "me/itstautvydas/${project.name.toLowerCase()}/loader/${project.name}Paper.java"
-            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/FoliaPluginWrapper.java"
-            include "me/itstautvydas/${project.name.toLowerCase()}/crossplatform/wrapper/PaperPluginWrapper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/multiplatform/wrapper/FoliaPluginWrapper.java"
+            include "me/itstautvydas/${project.name.toLowerCase()}/multiplatform/wrapper/PaperPluginWrapper.java"
         }
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
