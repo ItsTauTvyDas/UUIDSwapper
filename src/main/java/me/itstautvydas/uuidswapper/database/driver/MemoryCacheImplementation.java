@@ -8,6 +8,7 @@ import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
 import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,21 +26,14 @@ public class MemoryCacheImplementation extends DriverImplementation {
     }
 
     @Override
-    public boolean clearConnection() {
+    public void clean() {
+        onlineOnlinePlayerData.clear();
+        randomPlayerCache.clear();
+    }
+
+    @Override
+    public boolean isRunning() {
         return true;
-    }
-
-    @Override
-    public boolean isConnectionClosed() {
-        return false;
-    }
-
-    @Override
-    public void createOnlineUuidCacheTable() {
-    }
-
-    @Override
-    public void createRandomizedPlayerDataTable() {
     }
 
     @Override
@@ -53,6 +47,16 @@ public class MemoryCacheImplementation extends DriverImplementation {
                 .filter(player -> player.getOriginalUniqueId().equals(uuid))
                 .findFirst()
                 .orElse(null);
+    }
+
+    @Override
+    public List<OnlinePlayerData> getOnlinePlayersCache() {
+        return Collections.unmodifiableList(onlineOnlinePlayerData);
+    }
+
+    @Override
+    public List<PlayerData> getRandomPlayersCache() {
+        return Collections.unmodifiableList(randomPlayerCache);
     }
 
     @Override
