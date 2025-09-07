@@ -23,7 +23,11 @@
       {
         "name": "JSON",
         "class": "JsonImplementation",
-        "split": false,
+        "split": {
+          "enabled": false,
+          "file": "player-data/{original-uuid}.json",
+          "compact": false
+        },
         "file": "players-data.json"
       },
       {

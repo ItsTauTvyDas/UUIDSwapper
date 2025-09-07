@@ -23,7 +23,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-@SuppressWarnings({"FieldMayBeFinal", "unused"})
+@SuppressWarnings({"FieldMayBeFinal"})
 @ToString
 @Getter
 public class Configuration {
@@ -32,7 +32,7 @@ public class Configuration {
     @ReadMeDescription("This only works on paper and velocity!")
     public static class PaperConfiguration {
         @ReadMeDescription("Should plugin use Paper's MiniMessages (color codes with `&` won't work if this is enabled)")
-        private boolean useMiniMessages;
+        protected boolean useMiniMessages;
     }
 
     @ToString @Getter
@@ -41,20 +41,20 @@ public class Configuration {
     public static class DatabaseConfiguration {
         @RequiredProperty
         @ReadMeDescription("Should database be enabled")
-        private boolean enabled;
+        protected boolean enabled;
         @RequiredProperty @SerializedName("driver")
         @ReadMeDescription("Which driver to use from `drivers` array")
-        private String driverName;
+        protected String driverName;
         @SerializedName("debug")
         @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
-        private boolean debugEnabled = false;
+        protected boolean debugEnabled;
         @ReadMeDescription("Defined drivers implementations")
         @ReadMeLinkTo({
                 SQLiteImplementation.class,
                 JsonImplementation.class,
                 MemoryCacheImplementation.class
         })
-        private List<DriverImplementation> drivers = new ArrayList<>();
+        protected List<DriverImplementation> drivers = new ArrayList<>();
 
         public DriverImplementation getDriver(String name) {
             return drivers.stream()
@@ -71,42 +71,42 @@ public class Configuration {
     public static class OnlineAuthenticationConfiguration implements PostProcessable {
         @RequiredProperty
         @ReadMeDescription("Should online authentication be enabled")
-        private boolean enabled;
+        protected boolean enabled;
         @ReadMeDescription("Should offline players be allowed on online/secure server (Velocity/BungeeCord only)")
-        private boolean allowOfflinePlayers;
+        protected boolean allowOfflinePlayers;
         @RequiredProperty @SerializedName("use-service")
         @ReadMeDescription("Which service to use")
-        private String serviceName;
+        protected String serviceName;
         @RequiredProperty
         @ReadMeDescription("Which services to use next (in order) if above one fails (`array`)")
-        private LinkedHashSet<String> fallbackServices;
+        protected LinkedHashSet<String> fallbackServices;
         @ReadMeDescription("For how much time should last used successful service be remembered")
-        private long fallbackServiceRememberTime = 21600;
+        protected long fallbackServiceRememberTime = 21600;
         @ReadMeDescription("Max timeout for all requests summed up (-1 to disable)")
-        private long maxTimeout = 6000;
+        protected long maxTimeout = 6000;
         @ReadMeDescription("Min timeout for a single request (0 to disable)")
-        private long minTimeout = 1000;
+        protected long minTimeout = 1000;
         @ReadMeDescription("Check if player connects with online UUID (skips service requests). This works by comparing generated offline UUID to player's UUID")
-        private boolean checkForOnlineUniqueId = true;
+        protected boolean checkForOnlineUniqueId = true;
         @ReadMeDescription("Send plugin messages to console (e.g., when successfully fetched)")
-        private boolean sendMessagesToConsole = true;
+        protected boolean sendMessagesToConsole = true;
         @ReadMeDescription("Send plugin error messages")
-        private boolean sendErrorMessagesToConsole = true;
+        protected boolean sendErrorMessagesToConsole = true;
         @ReadMeDescription("How much time to wait (milliseconds) before requesting already used service")
-        private long serviceConnectionThrottle = 5000;
+        protected long serviceConnectionThrottle = 5000;
         @RequiredProperty
         @ReadMeDescription("Connection throttled disconnect message")
-        private String serviceConnectionThrottledMessage;
+        protected String serviceConnectionThrottledMessage;
         @RequiredProperty
         @ReadMeDescription("Cache configuration")
-        private CachingConfiguration caching;
+        protected CachingConfiguration caching;
         @RequiredProperty
         @ReadMeDescription("Everything that is defined here will be copied over all services (unless some service override that value)")
-        private DefaultServiceConfiguration serviceDefaults;
+        protected DefaultServiceConfiguration serviceDefaults;
         @RequiredProperty
         @ReadMeDescription("Service list (`array`)")
         @ReadMeLinkTo(ServiceConfiguration.class)
-        private List<ServiceConfiguration> services;
+        protected List<ServiceConfiguration> services;
 
         public ServiceConfiguration getService(String name) {
             if (name == null) return null;
@@ -132,9 +132,9 @@ public class Configuration {
     public static class CachingConfiguration {
         @RequiredProperty
         @ReadMeDescription("Should fetched data be saved")
-        private boolean enabled;
+        protected boolean enabled;
         @ReadMeDescription("Player data expiration time (minutes)")
-        private long keepTime = 7200;
+        protected long keepTime = 7200;
     }
 
     @ToString @Getter
@@ -205,22 +205,22 @@ public class Configuration {
     @ReadMeDescription("A service is used for fetching player's data.")
     public static class ServiceConfiguration extends DefaultServiceConfiguration implements PostProcessable {
         @ReadMeDescription("Should this service be enabled")
-        private boolean enabled = true;
+        protected boolean enabled = true;
         @RequiredProperty
         @ReadMeDescription("Name for the service that can be used in `use-service` or `fallback-services`")
-        private String name;
+        protected String name;
         @RequiredProperty
         @ReadMeDescription("Endpoint to where request should be sent")
-        private String endpoint;
+        protected String endpoint;
         @ReadMeDescription("JSON path to player's unique ID (support dashless UUIDs too), leave empty if response is suppose to be text only")
-        private String jsonPathToUuid;
+        protected String jsonPathToUuid;
         @ReadMeDescription("JSON path to player's properties")
-        private String jsonPathToProperties;
+        protected String jsonPathToProperties;
         @ReadMeDescription("Which services should be used for fetching player's properties, `json-path-to-properties` is also included if defined")
-        private LinkedHashSet<String> requestServicesForProperties = new LinkedHashSet<>();
+        protected LinkedHashSet<String> requestServicesForProperties = new LinkedHashSet<>();
         @ReadMeDescription("Custom response handlers")
         @ReadMeLinkTo(ResponseHandlerConfiguration.class)
-        private List<ResponseHandlerConfiguration> responseHandlers = new ArrayList<>();
+        protected List<ResponseHandlerConfiguration> responseHandlers = new ArrayList<>();
 
         public void setDefaults(DefaultServiceConfiguration service) {
             this.requestMethod = defaultValue(requestMethod, service.getRequestMethod(), "GET");
@@ -245,7 +245,7 @@ public class Configuration {
             this.customStatusCodeDisconnectMessages = combineMap(customStatusCodeDisconnectMessages, service.customStatusCodeDisconnectMessages);
         }
 
-        private Map<String, Object> combineMap(Map<String, Object> current, Map<String, Object> defaultMap) {
+        protected Map<String, Object> combineMap(Map<String, Object> current, Map<String, Object> defaultMap) {
             if (current == null && defaultMap == null)
                 return new HashMap<>();
             return new HashMap<>() {
@@ -258,7 +258,7 @@ public class Configuration {
             };
         }
 
-        private <T> T defaultValue(T current, T defaultValue, T defaultValueIfFail) {
+        protected <T> T defaultValue(T current, T defaultValue, T defaultValueIfFail) {
             if (current == null) {
                 if (defaultValue == null)
                     return defaultValueIfFail;
@@ -296,7 +296,7 @@ public class Configuration {
     public static class ResponseHandlerConfiguration implements PostProcessable {
         @RequiredProperty
         @ReadMeDescription("In which order should this response handler be executed (ascending)")
-        private long order = 9999;
+        protected long order = 9999;
         @RequiredProperty
         @ReadMeDescription("""
                 At what event should this response handler be executed. Available events:
@@ -307,29 +307,29 @@ public class Configuration {
                 \t`FETCHED_PROPERTIES` - action when properties were fetched
                 \t`PRE_FALLBACK_USE` - action on before any fallback use
                 \t`PLAYER_DATA_FETCHED` - last action when player's UUID and/or properties were fetched""")
-        private ServiceStateEvent event;
+        protected ServiceStateEvent event;
         @ReadMeDescription("Should the player be allowed to join (this is forceful option, meaning if it's true, no matter " +
                 "what, the player will be able to join, if false - instant disconnect, null - allow plugin to decide internally)")
-        private Boolean allowPlayerToJoin;
+        protected Boolean allowPlayerToJoin;
         @ReadMeDescription("Should properties be applied for the player")
-        private boolean applyProperties;
+        protected boolean applyProperties;
         @ReadMeDescription("Should properties be required to be requested and applied (disconnect if no properties or fallback could be used)")
-        private Boolean requireProperties;
+        protected Boolean requireProperties;
         @ReadMeDescription("Custom disconnect message if `allow-player-to-join` is set to false")
-        private String disconnectMessage;
+        protected String disconnectMessage;
         @ReadMeDescription("Send custom message to console (extra debugging?)")
-        private String messageToConsole;
+        protected String messageToConsole;
         @ReadMeDescription("Message type to send to console (INFO/WARNING/ERROR)")
-        private ConsoleMessageType consoleMessageType;
+        protected ConsoleMessageType consoleMessageType;
         @ReadMeDescription("Message type to send to console (AND / OR), default is AND")
-        private ConditionsMode conditionsMode;
+        protected ConditionsMode conditionsMode;
         @ReadMeDescription("Should conditions ignore placeholder value casing")
-        private boolean ignoreConditionsCase;
+        protected boolean ignoreConditionsCase;
         @ReadMeDescription("When comparing, should placeholder's value and specified value be converted to string for comparison")
-        private boolean forceStringOnConditions;
+        protected boolean forceStringOnConditions;
         @ReadMeDescription("Conditions (placeholder -> value) to check if response handler should be executed. Note that not everything can be a text (in \"\" quotes), " +
                 "comparison is done checking if both objects are equal,\nor if you really want simplicity, enable above setting")
-        private Map<String, Object> conditions;
+        protected Map<String, Object> conditions;
 
         public boolean testConditions(Map<String, Object> placeholders) {
             if (conditions == null || conditions.isEmpty())
@@ -418,13 +418,13 @@ public class Configuration {
         public static class UniqueIdRandomizer {
             @RequiredProperty
             @ReadMeDescription("Should plugin randomize player's unique ID (UUID)")
-            private boolean randomize;
+            protected boolean randomize;
             @RequiredProperty
             @ReadMeDescription("Should player's random unique ID be remembered")
-            private boolean save;
+            protected boolean save;
             @RequiredProperty
             @ReadMeDescription("When should saved unique ID expire (seconds)")
-            private boolean expire;
+            protected boolean expire;
         }
 
         @ToString(callSuper = true) @Getter
@@ -435,33 +435,33 @@ public class Configuration {
         })
         public static class UsernameRandomizer extends UniqueIdRandomizer {
             @RequiredProperty
-            private String outOfUsernamesDisconnectMessage;
+            protected String outOfUsernamesDisconnectMessage;
             @RequiredProperty
             @ReadMeDescription("Random characters to pick from")
-            private String characters;
+            protected String characters;
             @RequiredProperty
             @ReadMeDescription("Minimum length of randomized username")
-            private int fromLength;
+            protected int fromLength;
             @RequiredProperty
             @ReadMeDescription("Maximum length of randomized username")
-            private int toLength;
+            protected int toLength;
         }
 
         @RequiredProperty
         @ReadMeDescription("Should randomizer be enabled")
-        private boolean enabled;
+        protected boolean enabled;
         @RequiredProperty
         @ReadMeDescription("Should properties be applied (skin textures)")
-        private boolean useProperties;
+        protected boolean useProperties;
         @RequiredProperty
         @ReadMeDescription("Should properties first be fetched from services (doesn't matter if online authentication is disabled")
-        private boolean fetchPropertiesFromServices;
+        protected boolean fetchPropertiesFromServices;
         @RequiredProperty @SerializedName("username")
         @ReadMeMergeClass
-        private UsernameRandomizer usernameSettings;
+        protected UsernameRandomizer usernameSettings;
         @RequiredProperty @SerializedName("unique-id")
         @ReadMeMergeClass
-        private UniqueIdRandomizer uniqueIdSettings;
+        protected UniqueIdRandomizer uniqueIdSettings;
 
         public boolean isFetchPropertiesFromServices() {
             return fetchPropertiesFromServices && useProperties;
@@ -474,10 +474,10 @@ public class Configuration {
     public static class SwappedUniqueIdsConfiguration {
         @RequiredProperty
         @ReadMeDescription("Should player unique id swapping be enabled")
-        private boolean enabled;
+        protected boolean enabled;
         @RequiredProperty
         @ReadMeDescription("A map `(uuid/username -> uuid)` for swapped unique ids")
-        private Map<String, String> swap;
+        protected Map<String, String> swap;
     }
 
     @ToString(callSuper = true)
@@ -498,42 +498,42 @@ public class Configuration {
             `{prefix}` - prefix defined in `prefix`""")
     public static class CommandMessagesConfiguration {
         @RequiredProperty @ReadMeDescription("Command's prefix")
-        private String prefix;
+        protected String prefix;
         @RequiredProperty @ReadMeDescription("Message when no arguments")
-        private String noArguments;
+        protected String noArguments;
         @RequiredProperty @ReadMeDescription("Message when reload was successful. Available placeholders:\n" +
                 "`{took}` - how many milliseconds took to ")
-        private String reloadSuccess;
+        protected String reloadSuccess;
         @RequiredProperty @ReadMeDescription("Message when database driver failed to load. Available placeholders:\n" +
                 "`{driver}` - driver's name that failed to load")
-        private String reloadDatabaseDriverFailed;
+        protected String reloadDatabaseDriverFailed;
         @RequiredProperty @ReadMeDescription("""
                 Message when plugin failed to reload. Available placeholders:
                 `{error.class}` - exception's full (with package) class
                 `{error.class-name}` - exception's class name
                 `{error.message}` - exception's message""")
-        private String reloadFailed;
+        protected String reloadFailed;
         @RequiredProperty @ReadMeDescription("""
                 Message when player successfully pretends to be another player on next server join. Available placeholders:
                 `{new_username}` - player's new username
                 `{new_uuid}` - player's new unique ID""")
-        private String playerPretendSuccess;
+        protected String playerPretendSuccess;
         @RequiredProperty @ReadMeDescription("Message when plugin wasn't able to fake another player")
-        private String playerPretendFailed;
+        protected String playerPretendFailed;
     }
 
     @RequiredProperty
-    private PaperConfiguration paper;
+    protected PaperConfiguration paper;
     @RequiredProperty
-    private DatabaseConfiguration database;
+    protected DatabaseConfiguration database;
     @RequiredProperty
-    private OnlineAuthenticationConfiguration onlineAuthentication;
+    protected OnlineAuthenticationConfiguration onlineAuthentication;
     @RequiredProperty
-    private RandomizerConfiguration playerRandomizer;
+    protected RandomizerConfiguration playerRandomizer;
     @RequiredProperty
-    private SwappedUniqueIdsConfiguration swappedUniqueIds;
+    protected SwappedUniqueIdsConfiguration swappedUniqueIds;
     @RequiredProperty
-    private SwappedPlayerNamesConfiguration swappedPlayerNames;
+    protected SwappedPlayerNamesConfiguration swappedPlayerNames;
     @RequiredProperty
-    private CommandMessagesConfiguration commandMessages;
+    protected CommandMessagesConfiguration commandMessages;
 }
