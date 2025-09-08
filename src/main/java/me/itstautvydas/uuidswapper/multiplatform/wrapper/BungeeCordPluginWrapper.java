@@ -83,7 +83,7 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
 
     @EventHandler
     public void handlePlayerHandshake(PreLoginEvent event) {
-        tryForceOfflineMode(() -> event.getConnection().setOnlineMode(false), null);
+        forceOfflineModeIfNeeded(() -> event.getConnection().setOnlineMode(false));
     }
 
     @EventHandler
@@ -92,7 +92,6 @@ public class BungeeCordPluginWrapper extends JavaLoggerWrapper<UUIDSwapperBungee
                 event.getConnection().getName(),
                 event.getConnection().getUniqueId(),
                 null,
-                true,
                 true,
                 (message) -> {
                     if (message.hasMessage()) {

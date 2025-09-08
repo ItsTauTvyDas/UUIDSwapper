@@ -1,7 +1,6 @@
 package me.itstautvydas.uuidswapper.multiplatform;
 
 import com.google.gson.*;
-import com.google.gson.internal.LinkedTreeMap;
 import lombok.Getter;
 import me.itstautvydas.BuildConstants;
 import me.itstautvydas.uuidswapper.Utils;
@@ -54,7 +53,6 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
             .registerTypeAdapterFactory(new PostProcessingAdapterFactory())
             .registerTypeAdapterFactory(new StrictEnumTypeAdapterFactory())
             .registerTypeAdapterFactory(new DriverPolymorphicAdapterFactory())
-            .registerTypeAdapter(LinkedTreeMap.class, new SortedJsonSerializer())
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
 
@@ -146,55 +144,6 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     public final Path getConfigurationPath() {
         return dataDirectory.resolve("configuration.json");
     }
-
-//    @SuppressWarnings("StatementWithEmptyBody")
-//    public void updateConfiguration() throws Exception {
-//        var configurationPath = getConfigurationPath();
-//
-//        if (Files.notExists(configurationPath))
-//            return;
-//
-//        var md = MessageDigest.getInstance("MD5");
-//        try (var is = new FileInputStream(configurationPath.toFile());
-//             var dis = new DigestInputStream(is, md)) {
-//            var buffer = new byte[8192];
-//            while (dis.read(buffer) != -1) {}
-//        }
-//        var digest = md.digest();
-//        var hex = new StringBuilder(digest.length * 2);
-//        for (byte b : digest) hex.append(String.format("%02x", b));
-//        var hash = hex.toString();
-//
-//        if (hash.equals(BuildConstants.CONFIG_VERSION)) return;
-//
-//        var defaultConfiguration = loadDefaultConfiguration();
-//        var currentConfiguration = (JsonObject) loadConfiguration(true);
-//
-//        Utils.merge(defaultConfiguration, currentConfiguration);
-//        try (var writer = java.nio.file.Files.newBufferedWriter(
-//                configurationPath,
-//                java.nio.charset.StandardCharsets.UTF_8,
-//                java.nio.file.StandardOpenOption.CREATE,
-//                java.nio.file.StandardOpenOption.TRUNCATE_EXISTING)) {
-//            GSON.toJson(currentConfiguration, writer);
-//        }
-//        configuration = GSON.fromJson(currentConfiguration, Configuration.class);
-//        logInfo("Configuration file was updated because new version was found in the JAR.");
-//    }
-
-//    public JsonObject loadDefaultConfiguration() throws Exception {
-//        JsonObject configuration;
-//        try (InputStream in = getClass().getClassLoader().getResourceAsStream("configuration.json")) {
-//            if (in == null)
-//                throw new FileNotFoundException("configuration.json not found on classpath");
-//            try (var isr = new InputStreamReader(in)) {
-//                configuration = JsonParser.parseReader(isr).getAsJsonObject();
-//            } catch (JsonParseException e) {
-//                throw new IOException("Invalid configuration.json format", e);
-//            }
-//        }
-//        return configuration;
-//    }
 
     public void saveDefaultConfiguration() throws Exception {
         var configurationPath = getConfigurationPath();
@@ -298,26 +247,19 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
     public void handlePlayerDisconnect(String username, UUID uniqueId) {
         if (playerRandomizer != null)
             playerRandomizer.removeGeneratedPlayer(username, uniqueId);
+        PlayerDataFetcher.clearPlayerDataCache();
     }
 
     /**
      * Try setting player's connection to offline mode on online/secure server
-     * @param switchToOfflineMode Runnable - set Runnable object for setting online mode to false,
-     *                            null - no offline support on online/secure servers
-     * @param disconnectHandler Disconnect handler (can be null)
+     * @param switchToOfflineMode Runnable - set Runnable object for setting online mode to false
      */
-    public void tryForceOfflineMode(
-            @Nullable Runnable switchToOfflineMode,
-            @Nullable Consumer<Message> disconnectHandler
-    ) {
+    public void forceOfflineModeIfNeeded(Runnable switchToOfflineMode) {
+        if (switchToOfflineMode == null)
+            return;
         if (!configuration.getOnlineAuthentication().isEnabled())
             return;
         if (configuration.getOnlineAuthentication().isAllowOfflinePlayers() && MultiPlatform.get().isServerOnlineMode()) {
-            if (switchToOfflineMode == null) {
-                if (disconnectHandler != null)
-                    disconnectHandler.accept(new Message(Utils.GENERIC_DISCONNECT_MESSAGE_ID, true));
-                return;
-            }
             switchToOfflineMode.run();
         }
     }
@@ -327,8 +269,6 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
      * @param uniqueId Original unique ID
      * @param properties Properties to override
      * @param cacheFetchedData Should the fetched data be cached?
-     * @param switchToOfflineMode Runnable - set Runnable object for setting online mode to false,
-     *                            null - no offline support on online/secure servers
      * @param disconnectHandler Disconnect handler
      * @return Completable future for async
      */
@@ -338,7 +278,6 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
             @Nullable UUID uniqueId,
             @Nullable List<ProfilePropertyWrapper> properties,
             boolean cacheFetchedData,
-            @Nullable Object switchToOfflineMode,
             @NotNull Consumer<Message> disconnectHandler) {
         // I don't want to deal with nulls, passing completed future with null inside
         var dummy = CompletableFuture.completedFuture((BiObjectHolder<OnlinePlayerData, Message>)null);
@@ -346,10 +285,6 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         if (playerRandomizer == null) {
             if (!configuration.getOnlineAuthentication().isEnabled())
                 return dummy;
-            if (switchToOfflineMode == null)
-                tryForceOfflineMode(null, disconnectHandler);
-            else if (switchToOfflineMode instanceof Runnable runnable)
-                tryForceOfflineMode(runnable, disconnectHandler);
         } else {
             playerRandomizer.removeGeneratedPlayer(uniqueId);
             if (configuration.getPlayerRandomizer().getUsernameSettings().isRandomize()) {
@@ -401,33 +336,32 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
             return dummy;
         }
 
-        return PlayerDataFetcher.fetchPlayerData(
-                username,
-                uniqueId,
-                cacheFetchedData && playerRandomizer == null,
-                playerRandomizer == null,
-                false,
-                this
-        ).handle((fetchedData, ex) -> {
-            if (ex != null) {
-                fetchedData = new BiObjectHolder<>(
-                        null,
-                        new Message(configuration.getOnlineAuthentication()
-                                .getServiceDefaults()
-                                .getUnknownErrorDisconnectMessage(),
-                                false));
-                // Won't check for configuration if error messages are enabled, this is NOT a laughing matter.
-                // https://static.itstautvydas.me/funny/this-is-no-laughing-matter.jpg
-                logError("PlayerDataFetcher", "Failed to internally handle services requests!", ex);
-            } else if (fetchedData.containsFirst()) {
-                if (playerRandomizer != null && configuration.getPlayerRandomizer().isFetchPropertiesFromServices() &&
-                        fetchedData.getFirst().getProperties() != null)
-                    PlayerDataFetcher.setPlayerProperties(uniqueId, fetchedData.getFirst().getProperties());
-            }
-            if (fetchedData.containsSecond())
-                disconnectHandler.accept(fetchedData.getSecond());
-            return fetchedData;
-        });
+        return new PlayerDataFetcher(username, uniqueId, this)
+                .setCacheFetchedData(cacheFetchedData && playerRandomizer == null)
+                .setCacheDatabase(playerRandomizer == null)
+                .setCheckDatabaseCache(true)
+                .updateMessages()
+                .execute()
+                .handle((fetchedData, ex) -> {
+                    if (ex != null) {
+                        fetchedData = new BiObjectHolder<>(
+                                null,
+                                new Message(configuration.getOnlineAuthentication()
+                                        .getServiceDefaults()
+                                        .getUnknownErrorDisconnectMessage(),
+                                        false));
+                        // Won't check for configuration if error messages are enabled, this is NOT a laughing matter.
+                        // https://static.itstautvydas.me/funny/this-is-no-laughing-matter.jpg
+                        logError("PlayerDataFetcher", "Failed to internally handle services requests!", ex);
+                    } else if (fetchedData.containsFirst()) {
+                        if (playerRandomizer != null && configuration.getPlayerRandomizer().isFetchPropertiesFromServices() &&
+                                fetchedData.getFirst().getProperties() != null)
+                            PlayerDataFetcher.setPlayerProperties(uniqueId, fetchedData.getFirst().getProperties());
+                    }
+                    if (fetchedData.containsSecond())
+                        disconnectHandler.accept(fetchedData.getSecond());
+                    return fetchedData;
+                });
     }
 
     public boolean handleGameProfileRequest(
@@ -586,7 +520,8 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         PLAYER_DATA_FETCHER_THROTTLED,
         PLAYER_DATA_FETCHER_LAST_SERVICE,
         DATABASE_FETCHED_PLAYERS,
-        DATABASE_RANDOM_PLAYERS
+        DATABASE_RANDOM_PLAYERS,
+        PLAYER_DATA_MEMORY_CACHE
     }
 
     private String playerDataJson(Jsonable object, int counter, Object key) {
@@ -681,12 +616,22 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
                 }
                 yield str;
             }
+            case PLAYER_DATA_MEMORY_CACHE -> {
+                var str = "[PlayerDataFetcher.class] UUID -> OnlinePlayerData.class\n";
+                var it = PlayerDataFetcher.getCachedPlayerDataMap().entrySet().iterator();
+                if (!it.hasNext())
+                    yield str + "\n<no cached data>";
+                for (int i = 1; it.hasNext(); i++) {
+                    var entry = it.next();
+                    str += playerDataJson(entry.getValue(), i, entry.getKey());
+                }
+                yield str;
+            }
         };
     }
 
-    public void onPretendCommand(M messageAcceptor, UUID originalUniqueId, UUID uniqueId, String username,
-                                 boolean tryFetchProperties, Consumer<Runnable> async) {
-        async.accept(() -> {
+    public void onPretendCommand(M messageAcceptor, UUID originalUniqueId, UUID uniqueId, String username, boolean tryFetchProperties) {
+        scheduleTaskAsync(() -> {
             PlayerData data;
             boolean fetch = tryFetchProperties;
             if (fetch && MultiPlatform.get()

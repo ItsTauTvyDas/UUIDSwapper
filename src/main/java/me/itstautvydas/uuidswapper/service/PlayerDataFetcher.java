@@ -2,7 +2,8 @@ package me.itstautvydas.uuidswapper.service;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import lombok.Getter;
+import lombok.*;
+import lombok.experimental.Accessors;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
@@ -13,8 +14,6 @@ import me.itstautvydas.uuidswapper.exception.BreakContinuationException;
 import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.helper.ObjectHolder;
 import me.itstautvydas.uuidswapper.helper.SimplifiedLogger;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -32,9 +31,12 @@ public class PlayerDataFetcher {
     @Getter
     private static final Map<UUID, OnlinePlayerData> fetchedPlayerDataMap = new ConcurrentHashMap<>();
     @Getter
+    private static final Map<UUID, OnlinePlayerData> cachedPlayerDataMap = new ConcurrentHashMap<>();
+    @Getter
     private static final Map<UUID, PlayerData> pretendMap = new ConcurrentHashMap<>();
     @Getter
     private static final Map<UUID, Long> throttledConnections = new ConcurrentHashMap<>();
+
     private static final HttpClient client;
 
     @Getter
@@ -49,9 +51,16 @@ public class PlayerDataFetcher {
     private final String username;
     private final UUID uniqueId;
     private final SimplifiedLogger logger;
-    private final boolean cacheFetchedData;
-    private final boolean cacheDatabase;
-    private final boolean forceErrorMessages;
+
+    @Setter @Accessors(chain = true)
+    private boolean cacheFetchedData;
+    @Setter @Accessors(chain = true)
+    private boolean cacheDatabase;
+    @Setter @Accessors(chain = true)
+    private boolean forceErrorMessages;
+    @Setter @Accessors(chain = true)
+    private boolean checkDatabaseCache;
+
     private String disconnectMessage;
     private boolean disconnect = true;
     private boolean sendMessages;
@@ -66,16 +75,11 @@ public class PlayerDataFetcher {
     private boolean applyProperties = true;
     private boolean requireProperties;
 
-    public PlayerDataFetcher(String username, UUID uniqueId, SimplifiedLogger logger,
-                             boolean cacheFetchedData, boolean cacheDatabase, boolean forceErrorMessages) {
+    public PlayerDataFetcher(String username, UUID uniqueId, SimplifiedLogger logger) {
         this.config = MultiPlatform.get().getConfiguration().getOnlineAuthentication();
         this.username = username;
         this.uniqueId = Objects.requireNonNullElse(uniqueId, Utils.offlineUniqueIdIfNull(username, uniqueId));
         this.logger = Objects.requireNonNullElse(logger, MultiPlatform.get());
-        this.cacheFetchedData = cacheFetchedData;
-        this.cacheDatabase = cacheDatabase;
-        this.forceErrorMessages = forceErrorMessages;
-        updateMessages();
     }
 
     public static void setPlayerProperties(UUID originalUniqueId, List<ProfilePropertyWrapper> properties) {
@@ -88,6 +92,15 @@ public class PlayerDataFetcher {
         fetchedPlayerDataMap.put(originalUniqueId, new OnlinePlayerData(originalUniqueId, null, properties));
     }
 
+    public static void clearPlayerDataCache() {
+        if (cachedPlayerDataMap.isEmpty()) return;
+        cachedPlayerDataMap.entrySet().removeIf(e -> e.getValue().isExpired());
+    }
+
+    public static OnlinePlayerData getCachedPlayerData(UUID originalUniqueId) {
+        return cachedPlayerDataMap.get(originalUniqueId);
+    }
+
     public static OnlinePlayerData pullPlayerData(UUID originalUniqueId) {
         return fetchedPlayerDataMap.remove(originalUniqueId);
     }
@@ -97,36 +110,40 @@ public class PlayerDataFetcher {
     }
 
     public static PlayerData pretend(
-            UUID originalUniqueId,
-            String username,
             UUID uniqueId,
-            boolean tryFetchProperties,
+            String username,
+            UUID rewriteUniqueId,
+            boolean fetchProperties,
             SimplifiedLogger logger
     ) {
-        Objects.requireNonNull(originalUniqueId);
+        Objects.requireNonNull(uniqueId);
         Objects.requireNonNull(username);
         Objects.requireNonNull(logger);
 
-        if (tryFetchProperties) {
-            // Try fetch to get profile's properties
-            var data = fetchPlayerData(username, originalUniqueId, false, false, true, logger).join();
+        if (fetchProperties) {
+            // Try getting profile's properties
+            var data = new PlayerDataFetcher(username, uniqueId, logger)
+                    .setForceErrorMessages(true)
+                    .updateMessages()
+                    .execute()
+                    .join();
             if (data.containsFirst()) {
                 var playerData = new PlayerData(
-                        originalUniqueId,
+                        uniqueId,
                         username,
-                        uniqueId == null ? data.getFirst().getOnlineUniqueId() : uniqueId
+                        rewriteUniqueId == null ? data.getFirst().getUniqueId() : rewriteUniqueId
                 );
                 playerData.setProperties(data.getFirst().getProperties());
-                pretendMap.put(originalUniqueId, playerData);
+                pretendMap.put(uniqueId, playerData);
                 return playerData;
             }
             return null;
         } else {
-            if (uniqueId == null)
-                uniqueId = Utils.generateOfflineUniqueId(username);
-            var data = new PlayerData(originalUniqueId, username, uniqueId);
+            if (rewriteUniqueId == null)
+                rewriteUniqueId = Utils.generateOfflineUniqueId(username);
+            var data = new PlayerData(uniqueId, username, rewriteUniqueId);
             data.setProperties(new ArrayList<>());
-            pretendMap.put(originalUniqueId, data);
+            pretendMap.put(uniqueId, data);
             return data;
         }
     }
@@ -149,30 +166,51 @@ public class PlayerDataFetcher {
         return "PlayerDataFetcher";
     }
 
-    public static void forgetLastService() {
+    public static void forgetLastUsedService() {
         lastUsedServiceAt = 0;
         lastUsedService = null;
     }
 
-    @NotNull
-    public static CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> fetchPlayerData(
-            @NotNull String username,
-            @Nullable UUID uniqueId,
-            boolean cacheFetchedData,
-            boolean cacheDatabase,
-            boolean forceErrorMessages,
-            @Nullable SimplifiedLogger logger
-    ) {
-        final var fetcher = new PlayerDataFetcher(username, uniqueId, logger,
-                cacheFetchedData, cacheDatabase, forceErrorMessages);
+    private void logResponseHandler(BreakContinuationException ex) {
+        if (sendMessages)
+            logger.logInfo(servicePrefix, "[DEBUG] Response handler did not allow service to finish: %s", ex.getMessage());
+    }
 
+    public CompletableFuture<BiObjectHolder<OnlinePlayerData, Message>> execute() {
         return CompletableFuture.supplyAsync(() -> {
-            var services = new ArrayList<>(fetcher.config.getFallbackServices());
-            services.add(0, fetcher.config.getServiceName());
+            var database = MultiPlatform.get().getDatabase();
+            if (checkDatabaseCache && database.isDriverRunning()) {
+                var current = System.nanoTime();
+                var databaseObject = database.getOnlinePlayerCache(uniqueId);
+                var took = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - current);
+                if (!databaseObject.hasError()) {
+                    var fetched = databaseObject.object;
+                    logger.logInfo(
+                            servicePrefix,
+                            "Unique ID successfully fetched (from cache) for %s => %s (took %sms)",
+                            username, fetched.getUniqueId(), took
+                    );
+                    disconnect = false;
+                    fetchedPlayerData = fetched;
+                    placeholders.put("fetched-uuid", fetched.getUniqueId().toString());
+                    placeholders.put("fetched-dashless-uuid", Utils.toDashlessUniqueId(fetched.getUniqueId()));
+                    placeholders.put("execution-time", took);
+                    placeholders.put("took", took);
+                    try {
+                        handleResponse(ServiceStateEvent.DATABASE_FETCHED);
+                    } catch (BreakContinuationException ex) {
+                        logResponseHandler(ex);
+                    }
+                    return getOutput();
+                }
+            }
+
+            var services = new ArrayList<>(config.getFallbackServices());
+            services.add(0, config.getServiceName());
 
             // Make last used (successful) service first
             if (lastUsedService != null) {
-                var rememberTime = fetcher.config.getFallbackServiceRememberTime();
+                var rememberTime = config.getFallbackServiceRememberTime();
                 if (rememberTime != -1 && lastUsedServiceAt + rememberTime >= System.currentTimeMillis()) {
                     lastUsedService = null;
                     lastUsedServiceAt = 0;
@@ -185,42 +223,42 @@ public class PlayerDataFetcher {
 
             var prefix = getPrefix(null);
 
-            if (fetcher.sendMessages)
-                fetcher.logger.logInfo(prefix, "Player's %s original unique ID is %s", username, uniqueId);
+            if (sendMessages)
+                logger.logInfo(prefix, "Player's %s original unique ID is %s", username, uniqueId);
 
             int ignored = 0;
             for (int i = 0; i < services.size(); i++) {
-                String name = services.get(i);
-                fetcher.setService(name);
+                var name = services.get(i);
+                setService(name);
 
-                if (i - ignored == 1 && fetcher.sendErrorMessages)
-                    fetcher.logger.logWarning(prefix, "Defined service's name in 'use-service' failed, using fallback ones!", null);
+                if (i - ignored == 1 && sendErrorMessages)
+                    logger.logWarning(prefix, "Defined service's name in 'use-service' failed, using fallback ones!", null);
 
-                if (fetcher.service == null) {
-                    if (fetcher.sendMessages)
-                        fetcher.logger.logWarning(fetcher.servicePrefix, "I do not exist in this universe, I shall vanish...", null, name);
+                if (service == null) {
+                    if (sendMessages)
+                        logger.logWarning(servicePrefix, "I do not exist in this universe, I shall vanish...", null, name);
                     continue;
                 }
 
-                if (!fetcher.service.isEnabled()) {
-                    if (fetcher.sendDebugMessages)
-                        fetcher.logger.logInfo(fetcher.servicePrefix, "(Debug) Service is disabled, skipping.");
+                if (!service.isEnabled()) {
+                    if (sendDebugMessages)
+                        logger.logInfo(servicePrefix, "[DEBUG] Service is disabled, skipping.");
                     ignored++;
                     continue;
                 }
 
-                if (fetcher.service.getJsonPathToUuid() == null && fetcher.service.getJsonPathToProperties() == null) {
-                    if (fetcher.sendErrorMessages)
-                        fetcher.logger.logWarning(prefix, "Service '%s' doesn't have JSON path to unique ID not properties! Skipping.", null, name);
+                if (service.getJsonPathToUuid() == null && service.getJsonPathToProperties() == null) {
+                    if (sendErrorMessages)
+                        logger.logWarning(prefix, "Service '%s' doesn't have JSON path to unique ID not properties! Skipping.", null, name);
                     ignored++;
                     continue;
                 }
 
                 try {
-                    if (!fetcher.service.canSendRequest()) {
-                        if (fetcher.sendErrorMessages)
-                            fetcher.logger.logWarning(fetcher.servicePrefix, "Service got rate-limited!", null, name);
-                        if (!fetcher.disconnectCheckFallback(fetcher.service.getRateLimitedDisconnectMessage(), FallbackUsage.ON_SERVICE_RATE_LIMITED))
+                    if (!service.canSendRequest()) {
+                        if (sendErrorMessages)
+                            logger.logWarning(servicePrefix, "Service got rate-limited!", null, name);
+                        if (!disconnectCheckFallback(service.getRateLimitedDisconnectMessage(), FallbackUsage.ON_SERVICE_RATE_LIMITED))
                             break;
                     }
                 } catch (BreakContinuationException ex) {
@@ -228,22 +266,21 @@ public class PlayerDataFetcher {
                 }
 
                 try {
-                    if (!fetcher.fetchService())
+                    if (!fetchService())
                         break;
                 } catch (BreakContinuationException ex) {
-                    if (fetcher.sendMessages)
-                        fetcher.logger.logInfo(prefix, "(Debug) Response handler did not allow service to finish: %s", ex.getMessage());
+                    logResponseHandler(ex);
                     break;
                 }
             }
 
-            if (fetcher.sendMessages && fetcher.totalExecutionTime != 0)
-                fetcher.logger.logInfo(prefix, "Took %s/%sms to fetch data.", fetcher.totalExecutionTime, fetcher.config.getMaxTimeout());
+            if (sendMessages && totalExecutionTime != 0)
+                logger.logInfo(prefix, "Took %s/%sms to fetch data.", totalExecutionTime, config.getMaxTimeout());
 
-            if (fetcher.config.getServiceConnectionThrottle() > 0)
+            if (config.getServiceConnectionThrottle() > 0)
                 throttledConnections.put(uniqueId, System.currentTimeMillis());
 
-            return fetcher.getOutput();
+            return getOutput();
         });
     }
 
@@ -282,10 +319,11 @@ public class PlayerDataFetcher {
         return false;
     }
 
-    private void updateMessages() {
+    public PlayerDataFetcher updateMessages() {
         sendDebugMessages = service != null && service.isDebugEnabled();
         sendMessages = config.isSendMessagesToConsole() || sendDebugMessages || forceErrorMessages;
         sendErrorMessages = config.isSendErrorMessagesToConsole() || sendDebugMessages || forceErrorMessages;
+        return this;
     }
 
     private void updateTotalExecutionTime() {
@@ -323,7 +361,7 @@ public class PlayerDataFetcher {
             endpoint += "?" + queryString;
 
         if (sendDebugMessages)
-            logger.logInfo(prefix, "(Debug) Preparing request to %s", endpoint);
+            logger.logInfo(prefix, "[DEBUG] Preparing request to %s", endpoint);
 
         HttpRequest.Builder builder = HttpRequest.newBuilder();
         builder.uri(URI.create(endpoint));
@@ -349,7 +387,7 @@ public class PlayerDataFetcher {
             if (sendDebugMessages)
                 MultiPlatform.get().logInfo(
                         servicePrefix,
-                        "(Debug) Found valid response handler from the configuration ",
+                        "[DEBUG] Found valid response handler from the configuration ",
                         handler.resultToString()
                 );
 
@@ -367,6 +405,7 @@ public class PlayerDataFetcher {
             if (handler.getAllowPlayerToJoin() != null) {
                 if (handler.getAllowPlayerToJoin()) {
                     disconnect = false;
+                    disconnectMessage = null;
                 } else {
                     disconnectNoThrow(handler.getDisconnectMessage());
                 }
@@ -417,6 +456,7 @@ public class PlayerDataFetcher {
                             FallbackUsage.ON_SUB_SERVICE_RATE_LIMITED))
                         break;
                 }
+
                 var request = buildRequest(propertyService, prefix);
                 if (request == null) {
                     if (sendErrorMessages)
@@ -435,7 +475,7 @@ public class PlayerDataFetcher {
                 placeholders.put("sub-took-time", fetchTook);
 
                 if (sendDebugMessages)
-                    logger.logInfo(prefix, "(Debug) Took %sms to fetch data.", fetchTook);
+                    logger.logInfo(prefix, "[DEBUG] Took %sms to fetch data.", fetchTook);
 
                 totalExecutionTime += fetchTook;
                 updateTotalExecutionTime();
@@ -521,6 +561,8 @@ public class PlayerDataFetcher {
         placeholders.put("max-timeout", config.getMaxTimeout());
         placeholders.put("min-timeout", config.getMinTimeout());
 
+        handleResponse(ServiceStateEvent.SERVICE_START);
+
         try {
             HttpRequest request = buildRequest(service, servicePrefix);
             if (request == null)
@@ -556,7 +598,7 @@ public class PlayerDataFetcher {
             handleResponse(ServiceStateEvent.POST_REQUEST);
 
             if (sendDebugMessages)
-                logger.logInfo(servicePrefix, "(Debug) Took %sms to fetch data.", took.get());
+                logger.logInfo(servicePrefix, "[DEBUG] Took %sms to fetch data.", took.get());
 
             if (service.getExpectStatusCode() != null && response.statusCode() != service.getExpectStatusCode()) {
                 if (sendErrorMessages)
@@ -580,7 +622,7 @@ public class PlayerDataFetcher {
             } catch (Exception ex) {
                 responseBody = response.body();
                 if (sendDebugMessages)
-                    logger.logInfo(servicePrefix, "(Debug) Body does not have valid JSON, parsing as text => %s",
+                    logger.logInfo(servicePrefix, "[DEBUG] Body does not have valid JSON, parsing as text => %s",
                             responseBody.toString().replaceAll("\\R+", ""));
             }
 
@@ -590,7 +632,7 @@ public class PlayerDataFetcher {
                 placeholders.put("response", responseBody.toString());
 
             UUID rewriteUniqueId = null;
-            if (service.getJsonPathToUuid() != null) {
+            if (service.canRetrieveUniqueId()) {
                 String fetchedUniqueId = null;
                 try {
                     if (responseBody instanceof JsonElement element)
@@ -612,7 +654,7 @@ public class PlayerDataFetcher {
                     rewriteUniqueId = Utils.toUniqueId(fetchedUniqueId);
 
                     placeholders.put("fetched-uuid", rewriteUniqueId.toString());
-                    placeholders.put("fetched-dashless-uuid", rewriteUniqueId.toString().replace("-", ""));
+                    placeholders.put("fetched-dashless-uuid", Utils.toDashlessUniqueId(rewriteUniqueId));
 
                     handleResponse(ServiceStateEvent.FETCHED_UUID);
                 } catch (IllegalArgumentException ex) {
@@ -636,22 +678,25 @@ public class PlayerDataFetcher {
                     return disconnectCheckFallback(service.getPropertiesFailedDisconnectMessage(), FallbackUsage.ON_BAD_PROPERTIES);
             }
 
-            boolean cache = rewriteUniqueId == null;
-            if (cache)
-                rewriteUniqueId = uniqueId;
+            fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties)
+                    .updateTime(null, null)
+                    .setTimeKeep(Math.max(-1, TimeUnit.MINUTES.toMillis(service.getCacheKeepTime())));
 
-            if (cache && config.getCaching().isEnabled() && database.getConfiguration().isEnabled() && database.isDriverRunning()) {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
-                if (cacheDatabase) {
+            if (cacheDatabase) {
+                if (service.getAllowDatabaseCaching() && database.getConfiguration().isEnabled() && database.isDriverRunning())
                     database.storeOnlinePlayerCache(fetchedPlayerData);
-                    fetchedPlayerData.updateTime(null, null);
-                }
-            } else {
-                fetchedPlayerData = new OnlinePlayerData(uniqueId, rewriteUniqueId, properties);
+                if (service.getCacheInMemory())
+                    cachedPlayerDataMap.put(uniqueId, fetchedPlayerData);
             }
 
-            if (sendMessages && !rewriteUniqueId.equals(uniqueId))
-                logger.logInfo(servicePrefix, "Unique ID successfully fetched for %s => %s (took %s/%sms)", username, rewriteUniqueId, took, totalExecutionTime);
+            var tookString = ", took %s/%sms".formatted(took, totalExecutionTime);
+            var withProperties = properties != null && !properties.isEmpty() ? " (with properties)" : "";
+            if (sendMessages) {
+                if (rewriteUniqueId != null)
+                    logger.logInfo(servicePrefix, "Unique ID successfully fetched%s for %s => %s%s", withProperties, username, rewriteUniqueId, tookString);
+                else if (!withProperties.isEmpty())
+                    logger.logInfo(servicePrefix, "Properties successfully fetched for %s%s", username, tookString);
+            }
 
             if (cacheFetchedData)
                 fetchedPlayerDataMap.put(uniqueId, fetchedPlayerData);
@@ -661,7 +706,7 @@ public class PlayerDataFetcher {
         } catch (Exception ex) {
             Utils.addExceptionPlaceholders(ex, placeholders);
             if (sendErrorMessages)
-                logger.logError(servicePrefix, "Unknown error, failed to fetch unique ID from the service!", ex);
+                logger.logError(servicePrefix, "Unknown error, failed to fetch unique ID or properties from the service!", ex);
             if (sendDebugMessages)
                 logger.logError(ex.getMessage(), ex);
             return disconnectCheckFallback(service.getUnknownErrorDisconnectMessage(), FallbackUsage.ON_UNKNOWN_ERROR);

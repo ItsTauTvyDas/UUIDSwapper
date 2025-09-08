@@ -1,6 +1,9 @@
 package me.itstautvydas.uuidswapper.multiplatform.wrapper;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandSource;
@@ -9,8 +12,6 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import com.velocitypowered.api.util.GameProfile;
@@ -41,6 +42,17 @@ public class VelocityPluginWrapper extends MultiPlatform<UUIDSwapperVelocity, Lo
                 .deserialize(Utils.replacePlaceholders(message.apply(getConfiguration().getCommandMessages()), placeholders)));
     }
 
+    private LiteralArgumentBuilder<CommandSource> debug(DebugCommandCacheType type) {
+        return BrigadierCommand.literalArgumentBuilder(type.toString()).executes(ctx -> {
+            ctx.getSource().sendMessage(
+                    LegacyComponentSerializer
+                            .legacyAmpersand()
+                            .deserialize(getDebugMessage(type))
+            );
+            return Command.SINGLE_SUCCESS;
+        });
+    }
+
     @Override
     public void registerCommand(String commandName) {
         var commandManager = ((VelocityPluginWrapper) MultiPlatform.get()).getServer().getCommandManager();
@@ -49,14 +61,38 @@ public class VelocityPluginWrapper extends MultiPlatform<UUIDSwapperVelocity, Lo
                 .executes(ctx -> {
                     onNoArgsCommand(ctx);
                     return Command.SINGLE_SUCCESS;
-                })
-                .then(BrigadierCommand.literalArgumentBuilder("reload")
+                }
+                ).then(BrigadierCommand.literalArgumentBuilder("reload")
                         .requires(source -> source.hasPermission(Utils.RELOAD_COMMAND_PERMISSION))
                         .executes(ctx -> {
                             onReloadCommand(ctx);
                             return Command.SINGLE_SUCCESS;
-                        }))
-                .build();
+                        })
+                ).then(BrigadierCommand.literalArgumentBuilder("debug")
+                        .requires(source -> source.hasPermission(Utils.DEBUG_COMMAND_PERMISSION))
+                        .then(debug(DebugCommandCacheType.PLAYER_DATA_FETCHER_FETCHED))
+                        .then(debug(DebugCommandCacheType.PLAYER_DATA_FETCHER_PRETEND))
+                        .then(debug(DebugCommandCacheType.PLAYER_DATA_FETCHER_THROTTLED))
+                        .then(debug(DebugCommandCacheType.PLAYER_DATA_FETCHER_LAST_SERVICE))
+                        .then(debug(DebugCommandCacheType.DATABASE_FETCHED_PLAYERS))
+                        .then(debug(DebugCommandCacheType.DATABASE_RANDOM_PLAYERS))
+                        .then(debug(DebugCommandCacheType.PLAYER_DATA_MEMORY_CACHE))
+                ).then(BrigadierCommand.literalArgumentBuilder("pretend")
+                        .requires(source -> source.hasPermission(Utils.PRETEND_COMMAND_PERMISSION))
+                        .then(BrigadierCommand.requiredArgumentBuilder("username", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    Utils.pretend(ctx);
+                                    return Command.SINGLE_SUCCESS;
+                                }).then(BrigadierCommand.requiredArgumentBuilder("fetchProperties", BoolArgumentType.bool())
+                                        .executes(ctx -> {
+                                            Utils.pretend(ctx);
+                                            return Command.SINGLE_SUCCESS;
+                                        }).then(BrigadierCommand.requiredArgumentBuilder("uniqueId", StringArgumentType.word())
+                                                .executes(ctx -> {
+                                                    Utils.pretend(ctx);
+                                                    return Command.SINGLE_SUCCESS;
+                                                }))))
+                ).build();
 
         commandManager.register(commandManager.metaBuilder(commandName)
                 .plugin(handle)
@@ -120,12 +156,12 @@ public class VelocityPluginWrapper extends MultiPlatform<UUIDSwapperVelocity, Lo
 
     @Subscribe
     public EventTask handlePlayerPreLogin(PreLoginEvent event) {
+        forceOfflineModeIfNeeded(() -> event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode()));
         return EventTask.async(() -> handlePlayerLogin(
                 event.getUsername(),
                 event.getUniqueId(),
                 null,
                 true,
-                (Runnable) () -> event.setResult(PreLoginEvent.PreLoginComponentResult.forceOfflineMode()),
                 (message) -> {
                     if (message.hasMessage()) {
                         if (message.isTranslatable()) {
