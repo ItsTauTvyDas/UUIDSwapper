@@ -27,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -56,7 +57,8 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
             .registerTypeAdapter(String.class, new StringListToStringAdapter())
             .create();
 
-    public static Object createWrapperInstance(PlatformType type) throws Exception {
+    public static Object createWrapperInstance(PlatformType type)
+            throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         var loaderClass = Class.forName("me.itstautvydas." + BuildConstants.NAME.toLowerCase()
                 + ".multiplatform.wrapper."
                 + type.getName() + "PluginWrapper");
@@ -71,11 +73,7 @@ public abstract class MultiPlatform<P, L, S, M> implements SimplifiedLogger {
         MultiPlatform<P, L, S, M> implementation;
 
         try {
-            implementation = switch (type) {
-                case VELOCITY -> (MultiPlatform<P, L, S, M>) new VelocityPluginWrapper();
-                case BUNGEE -> (MultiPlatform<P, L, S, M>) new BungeeCordPluginWrapper();
-                case PAPER, FOLIA -> (MultiPlatform<P, L, S, M>) createWrapperInstance(type);
-            };
+            implementation = (MultiPlatform<P, L, S, M>) createWrapperInstance(type);
             CURRENT = implementation;
             CURRENT_LOGGER = implementation; // a workaround to get logger when CURRENT might be null
         } catch (Exception ex) {
