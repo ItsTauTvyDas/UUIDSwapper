@@ -5,7 +5,6 @@ import lombok.Getter;
 import me.itstautvydas.uuidswapper.Utils;
 import me.itstautvydas.uuidswapper.database.Queueable;
 import me.itstautvydas.uuidswapper.database.TableBasedDriver;
-import me.itstautvydas.uuidswapper.helper.BiObjectHolder;
 import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
 import me.itstautvydas.uuidswapper.data.OnlinePlayerData;
 import me.itstautvydas.uuidswapper.data.PlayerData;
@@ -44,7 +43,7 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
     @ReadMeDescription("SQLite arguments")
     private Map<String, String> args = new HashMap<>();
 
-    private transient BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+    private transient BlockingQueue<Queueable> queue = new LinkedBlockingQueue<>();
 
     private Connection createConnection() throws SQLException {
         return DriverManager.getConnection(connectionUrl);
