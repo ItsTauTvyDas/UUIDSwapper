@@ -76,7 +76,6 @@ public class VelocityPluginWrapper extends MultiPlatform<UUIDSwapperVelocity, Lo
                         .then(debug(DebugCommandCacheType.PLAYER_DATA_FETCHER_LAST_SERVICE))
                         .then(debug(DebugCommandCacheType.DATABASE_FETCHED_PLAYERS))
                         .then(debug(DebugCommandCacheType.DATABASE_RANDOM_PLAYERS))
-                        .then(debug(DebugCommandCacheType.PLAYER_DATA_MEMORY_CACHE))
                 ).then(BrigadierCommand.literalArgumentBuilder("pretend")
                         .requires(source -> source.hasPermission(Utils.PRETEND_COMMAND_PERMISSION))
                         .then(BrigadierCommand.requiredArgumentBuilder("username", StringArgumentType.word())

@@ -1,7 +1,10 @@
 package me.itstautvydas.uuidswapper;
 
 import com.google.gson.*;
+import com.mojang.brigadier.context.CommandContext;
+import com.velocitypowered.api.proxy.Player;
 import lombok.experimental.UtilityClass;
+import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.PrintWriter;
@@ -200,35 +203,26 @@ public class Utils {
         return UUID.fromString(uniqueId);
     }
 
+    public <T> T getOptionalArgument(CommandContext<?> ctx, String name, Class<T> type, T defaultValue) {
+        try {
+            return ctx.getArgument(name, type);
+        } catch (IllegalArgumentException ex) {
+            return defaultValue;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> void pretend(CommandContext<T> ctx) {
+        if (ctx.getSource() instanceof Player player)
+            ((MultiPlatform<?, ?, ?, CommandContext<T>>) MultiPlatform.get()).onPretendCommand(
+                    ctx,
+                    player.getUniqueId(),
+                    Utils.getOptionalArgument(ctx, "uniqueId", UUID.class, null),
+                    ctx.getArgument("username", String.class),
+                    Utils.getOptionalArgument(ctx, "fetchProperties", boolean.class, false));
+    }
+
     public String toDashlessUniqueId(UUID uniqueId) {
         return uniqueId.toString().replace("-", "");
     }
-
-    // https://stackoverflow.com/questions/34092373/merge-extend-json-objects-using-gson-in-java
-//    public static void merge(JsonObject defaultConfiguration, JsonObject currentConfiguration) {
-//        for (Map.Entry<String, JsonElement> rightEntry : defaultConfiguration.entrySet()) {
-//            String rightKey = rightEntry.getKey();
-//            JsonElement rightVal = rightEntry.getValue();
-//            if (currentConfiguration.has(rightKey)) {
-//                // conflict
-//                JsonElement leftVal = currentConfiguration.get(rightKey);
-//                if (leftVal.isJsonArray() && rightVal.isJsonArray()) {
-//                    JsonArray leftArr = leftVal.getAsJsonArray();
-//                    JsonArray rightArr = rightVal.getAsJsonArray();
-//                    // concat the arrays -- there cannot be a conflict in an array, it's just a collection of stuff
-//                    for (int i = 0; i < rightArr.size(); i++)
-//                        leftArr.add(rightArr.get(i));
-//                } else if (leftVal.isJsonObject() && rightVal.isJsonObject()) {
-//                    // recursive merging
-//                    merge(rightVal.getAsJsonObject(), leftVal.getAsJsonObject());
-//                } else {// not both arrays or objects, normal merge with conflict resolution
-//                    if (leftVal.isJsonNull() && !rightVal.isJsonNull()) {
-//                        currentConfiguration.add(rightKey, rightVal);
-//                    }
-//                }
-//            } else { // no conflict, add to the object
-//                currentConfiguration.add(rightKey, rightVal);
-//            }
-//        }
-//    }
 }

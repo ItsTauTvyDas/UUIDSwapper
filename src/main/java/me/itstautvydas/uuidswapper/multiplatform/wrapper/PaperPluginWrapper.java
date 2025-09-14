@@ -19,12 +19,10 @@ import me.itstautvydas.uuidswapper.multiplatform.PluginTaskWrapper;
 import me.itstautvydas.uuidswapper.multiplatform.shared.JavaLoggerWrapper;
 import me.itstautvydas.uuidswapper.loader.UUIDSwapperPaper;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
@@ -34,7 +32,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Function;
 
 public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Server, CommandContext<CommandSourceStack>> implements Listener {
@@ -43,25 +40,6 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Serv
         ctx.getSource().getSender().sendMessage(LegacyComponentSerializer
                 .legacy('&')
                 .deserialize(Utils.replacePlaceholders(message.apply(getConfiguration().getCommandMessages()), placeholders)));
-    }
-
-    private static <T> T getOptionalArgument(CommandContext<?> ctx, String name, Class<T> type, T defaultValue) {
-        try {
-            return ctx.getArgument(name, type);
-        } catch (IllegalArgumentException ex) {
-            return defaultValue;
-        }
-    }
-
-    private void pretend(CommandContext<CommandSourceStack> ctx) {
-        if (ctx.getSource().getSender() instanceof Player player)
-            onPretendCommand(
-                    ctx,
-                    player.getUniqueId(),
-                    getOptionalArgument(ctx, "uniqueId", UUID.class, null),
-                    ctx.getArgument("username", String.class),
-                    getOptionalArgument(ctx, "fetchProperties", boolean.class, false),
-                    run -> Bukkit.getScheduler().runTaskAsynchronously(handle, run));
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> debug(DebugCommandCacheType type) {
@@ -101,21 +79,18 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Serv
                                 .requires(source -> source.getSender().hasPermission(Utils.PRETEND_COMMAND_PERMISSION))
                                 .then(Commands.argument("username", StringArgumentType.word())
                                         .executes(ctx -> {
-                                            pretend(ctx);
+                                            Utils.pretend(ctx);
                                             return Command.SINGLE_SUCCESS;
-                                        })
-                                        .then(Commands.argument("fetchProperties", BoolArgumentType.bool())
+                                        }).then(Commands.argument("fetchProperties", BoolArgumentType.bool())
                                                 .executes(ctx -> {
-                                                    pretend(ctx);
+                                                    Utils.pretend(ctx);
                                                     return Command.SINGLE_SUCCESS;
-                                                })
-                                                .then(Commands.argument("uniqueId", ArgumentTypes.uuid())
+                                                }).then(Commands.argument("uniqueId", ArgumentTypes.uuid())
                                                         .executes(ctx -> {
-                                                            pretend(ctx);
+                                                            Utils.pretend(ctx);
                                                             return Command.SINGLE_SUCCESS;
                                                         }))))
-                        )
-                .build()));
+                        ).build()));
     }
 
     @Override
@@ -166,7 +141,6 @@ public class PaperPluginWrapper extends JavaLoggerWrapper<UUIDSwapperPaper, Serv
                         ))
                         .toList(),
                 true,
-                null,
                 (message) -> {
                     if (message.hasMessage()) {
                         event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
