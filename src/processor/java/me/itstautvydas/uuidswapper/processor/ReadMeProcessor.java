@@ -19,7 +19,6 @@ import java.io.Writer;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@SuppressWarnings("unused") // stfu about that warning, me no like
 @SupportedAnnotationTypes({
         "me.itstautvydas.uuidswapper.processor.ReadMeTitle",
         "me.itstautvydas.uuidswapper.processor.ReadMeDescription"
@@ -28,7 +27,8 @@ import java.util.stream.Collectors;
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedOptions({
         "configdoc.optionName",
-        "configdoc.descriptionName"
+        "configdoc.descriptionName",
+        "configdoc.defaultName"
 })
 @AutoService(Processor.class)
 public class ReadMeProcessor extends AbstractProcessor {
@@ -38,6 +38,7 @@ public class ReadMeProcessor extends AbstractProcessor {
     private Filer filer;
     private String optionName;
     private String descriptionName;
+    private String defaultName;
 
     private static List<TypeElement> getSuperClassesReverse(TypeElement type, Map<String, String> overwrittenDescriptions) {
         var list = new ArrayList<TypeElement>();
@@ -66,6 +67,8 @@ public class ReadMeProcessor extends AbstractProcessor {
     }
 
     private static String applySpaces(String string, int width) {
+        if (string == null)
+            return " ".repeat(width);
         var spaces = width - string.length();
         if (spaces < 0)
             return string;
@@ -91,6 +94,7 @@ public class ReadMeProcessor extends AbstractProcessor {
         this.filer = processingEnv.getFiler();
         this.optionName = processingEnv.getOptions().getOrDefault("configdoc.optionName", "Option");
         this.descriptionName = processingEnv.getOptions().getOrDefault("configdoc.descriptionName", "Description");
+        this.defaultName = processingEnv.getOptions().getOrDefault("configdoc.defaultName", "If undefined");
     }
 
     private ClassInfo processClass(Element element, String prefix, ClassInfo oldClassInfo, Map<String, String> overwrittenDescriptions) {
@@ -109,7 +113,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                 return null;
             classInfo = classes.computeIfAbsent(type, t -> new ClassInfo(
                     title.value().isBlank() ? t.getSimpleName().toString().replaceAll("([a-z])([A-Z])", "$1 $2") : title.value(),
-                    description != null ? description.value() : "",
+                    applyPlaceholders(description != null ? description.value() : ""),
                     title.order(),
                     prefix,
                     new ArrayList<>(),
@@ -128,14 +132,15 @@ public class ReadMeProcessor extends AbstractProcessor {
                 var field = (VariableElement) enclosed;
 
                 var fieldDescription = field.getAnnotation(ReadMeDescription.class);
-                String descriptionName = null;
+                String description = null;
                 if (overwrittenDescriptions != null)
-                    descriptionName = overwrittenDescriptions.get(field.getSimpleName().toString());
+                    description = overwrittenDescriptions.get(field.getSimpleName().toString());
                 var merge = field.getAnnotation(ReadMeMergeClass.class);
-                if (!disableDescriptions && descriptionName == null && fieldDescription == null && merge == null)
+                if (!disableDescriptions && description == null && fieldDescription == null && merge == null)
                     continue;
 
                 var linkTo = field.getAnnotation(ReadMeLinkTo.class);
+                var defaultAnnotation = field.getAnnotation(ReadMeDefault.class);
 
                 var name = getJsonSerializedName(field);
                 if (name == null || name.isBlank())
@@ -150,20 +155,21 @@ public class ReadMeProcessor extends AbstractProcessor {
                 if (linkTo != null)
                     sections = getClasses(linkTo);
 
-                if (disableDescriptions || fieldDescription != null || descriptionName != null) {
+                if (disableDescriptions || fieldDescription != null || description != null) {
                     if (!disableDescriptions) {
-                        if (descriptionName == null)
-                            descriptionName = fieldDescription.value();
-                        if (descriptionName != null)
-                            descriptionName = descriptionName
+                        if (description == null)
+                            description = fieldDescription.value();
+                        if (description != null)
+                            description = description
                                     .replace("\n", "<br/>")
                                     .replace("\t", "    "); // 4 spaces
                     }
                     classInfo.fields.add(new FieldInfo(
                             prefix + name,
-                            descriptionName,
+                            applyPlaceholders(description),
                             sections,
-                            fieldType
+                            fieldType,
+                            defaultAnnotation != null ? defaultAnnotation.value() : null
                     ));
                 }
 
@@ -183,14 +189,20 @@ public class ReadMeProcessor extends AbstractProcessor {
             for (int i = 0; i < extraFields.value().length; i += 3) {
                 classInfo.fields.add(new FieldInfo(
                         prefix + extraFields.value()[i],
-                        extraFields.value()[i + 1],
+                        applyPlaceholders(extraFields.value()[i + 1]),
                         null,
-                        extraFields.value()[i + 2]
+                        extraFields.value()[i + 2],
+                        null
                 ));
             }
         }
 
         return classInfo;
+    }
+
+    private String applyPlaceholders(String string) {
+        if (string == null || string.isBlank()) return string;
+        return string.replace("{current_time}", String.valueOf(System.currentTimeMillis()));
     }
 
     @Override
@@ -248,9 +260,16 @@ public class ReadMeProcessor extends AbstractProcessor {
             if (!classInfo.fields.isEmpty()) {
                 var mpl = optionName.length();
                 var mdl = descriptionName.length();
+                var dl = 0;
 
                 // Find max option and description lengths
                 for (FieldInfo fieldInfo : classInfo.fields) {
+                    if (fieldInfo.defaultValue != null) {
+                        if (dl == 0) {
+                            dl = defaultName.length();
+                        }
+                        dl = Math.max(dl, fieldInfo.defaultValue.length());
+                    }
                     mpl = Math.max(mpl, fieldInfo.option.length());
                     if (!disableDescriptions)
                         mdl = Math.max(mdl, fieldInfo.description.length());
@@ -277,14 +296,19 @@ public class ReadMeProcessor extends AbstractProcessor {
 
                 var fieldOptionName = applySpaces(optionName, mpl);
                 var fieldDescName = applySpaces(descriptionName, mdl);
+                var fieldDefName = applySpaces(defaultName, dl);
 
                 builder.append("| ").append(fieldOptionName).append(" |");
                 if (!disableDescriptions)
                     builder.append(' ').append(fieldDescName).append(" |");
+                if (dl != 0)
+                    builder.append(' ').append(fieldDefName).append(" |");
                 builder.append('\n');
                 builder.append("|-").append("-".repeat(mpl)).append("-|");
                 if (!disableDescriptions)
                     builder.append('-').append("-".repeat(mdl)).append("-|");
+                if (dl != 0)
+                    builder.append('-').append("-".repeat(dl)).append("-|");
                 builder.append('\n');
                 for (FieldInfo fieldInfo : classInfo.fields) {
                     var option = classInfo.prefix + fieldInfo.option;
@@ -314,6 +338,10 @@ public class ReadMeProcessor extends AbstractProcessor {
                             description.append(')');
                         }
                         builder.append(applySpaces(description.toString(), mdl));
+                    }
+                    if (dl != 0) {
+                        builder.append(" | ");
+                        builder.append(applySpaces(fieldInfo.defaultValue, dl));
                     }
                     builder.append(" |\n");
                 }
@@ -351,6 +379,7 @@ public class ReadMeProcessor extends AbstractProcessor {
                              ReadMeTableSettings settings) {
     }
 
-    private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className) {
+    private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className,
+                             String defaultValue) {
     }
 }
