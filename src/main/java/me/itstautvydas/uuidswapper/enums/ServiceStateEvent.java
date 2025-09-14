@@ -1,6 +1,7 @@
 package me.itstautvydas.uuidswapper.enums;
 
 public enum ServiceStateEvent {
+    SERVICE_START,
     PRE_REQUEST,
     POST_REQUEST,
     FETCHED_UUID,
