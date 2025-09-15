@@ -51,7 +51,6 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
 
     @Override
     public boolean init() {
-        supportsCaching = true;
         databaseFilePath = MultiPlatform.get()
                 .getDataDirectory()
                 .resolve(fileName)

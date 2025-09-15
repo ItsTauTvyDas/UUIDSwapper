@@ -2,6 +2,7 @@ package me.itstautvydas.uuidswapper.database;
 
 import com.google.gson.annotations.SerializedName;
 import lombok.Getter;
+import me.itstautvydas.uuidswapper.annotation.RequiredProperty;
 import me.itstautvydas.uuidswapper.config.Configuration;
 import me.itstautvydas.uuidswapper.json.Jsonable;
 import me.itstautvydas.uuidswapper.multiplatform.MultiPlatform;
@@ -23,7 +24,7 @@ import java.util.function.BiFunction;
 @Getter
 @ReadMeExtraFields({
         // JSON's class field is only used in DriverPolymorphicAdapterFactory, no need to have it in the class itself
-        "class", "(Do not edit unless you are implementing your own driver!!!) Driver class path to load and initiate for later use, if class is defined without a package, it's treated as built-in one", "String"
+        "class;required=true", "(Do not edit unless you are implementing your own driver!!!) Driver class path to load and initiate for later use, if class is defined without a package, it's treated as built-in one", "String"
 })
 public abstract class DriverImplementation implements PostProcessable, Jsonable {
     public static final String CREATED_AT = "created_at";
@@ -39,12 +40,12 @@ public abstract class DriverImplementation implements PostProcessable, Jsonable 
     public static final String RANDOM_PLAYER_CACHE_USERNAME = "username";
     public static final String RANDOM_PLAYER_CACHE_UUID = "uuid";
 
+    @RequiredProperty
     @SerializedName("name")
     @ReadMeDescription("Name of the driver")
     private String name; // Expose this to GSON
-    private transient String prefix;
 
-    protected transient boolean supportsCaching;
+    private transient String prefix;
 
     @Override
     public void postProcessed() {
