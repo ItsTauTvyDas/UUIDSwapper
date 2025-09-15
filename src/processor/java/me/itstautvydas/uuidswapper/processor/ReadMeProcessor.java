@@ -16,6 +16,10 @@ import javax.lang.model.type.TypeMirror;
 import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.Writer;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,7 +32,10 @@ import java.util.stream.Collectors;
 @SupportedOptions({
         "configdoc.optionName",
         "configdoc.descriptionName",
-        "configdoc.defaultName"
+        "configdoc.defaultName",
+        "configdoc.outputFileName",
+        "configdoc.optionRequiredPrefix",
+        "configdoc.rawConfigurationPath",
 })
 @AutoService(Processor.class)
 public class ReadMeProcessor extends AbstractProcessor {
@@ -39,6 +46,9 @@ public class ReadMeProcessor extends AbstractProcessor {
     private String optionName;
     private String descriptionName;
     private String defaultName;
+    private String outputFileName;
+    private String optionRequiredPrefix;
+    private String rawConfigurationPath;
 
     private static List<TypeElement> getSuperClassesReverse(TypeElement type, Map<String, String> overwrittenDescriptions) {
         var list = new ArrayList<TypeElement>();
@@ -95,6 +105,9 @@ public class ReadMeProcessor extends AbstractProcessor {
         this.optionName = processingEnv.getOptions().getOrDefault("configdoc.optionName", "Option");
         this.descriptionName = processingEnv.getOptions().getOrDefault("configdoc.descriptionName", "Description");
         this.defaultName = processingEnv.getOptions().getOrDefault("configdoc.defaultName", "If undefined");
+        this.outputFileName = processingEnv.getOptions().getOrDefault("configdoc.outputFileName", "ConfigurationDocs.generated.md");
+        this.optionRequiredPrefix = processingEnv.getOptions().getOrDefault("configdoc.optionRequiredPrefix", "\\*");
+        this.rawConfigurationPath = processingEnv.getOptions().getOrDefault("configdoc.rawConfigurationPath", null);
     }
 
     private ClassInfo processClass(Element element, String prefix, ClassInfo oldClassInfo, Map<String, String> overwrittenDescriptions) {
@@ -164,12 +177,19 @@ public class ReadMeProcessor extends AbstractProcessor {
                                     .replace("\n", "<br/>")
                                     .replace("\t", "    "); // 4 spaces
                     }
+
+                    var isRequired = field.getAnnotationMirrors().stream()
+                            .map(m -> (TypeElement) m.getAnnotationType().asElement())
+                            .anyMatch(te -> te.getQualifiedName()
+                                    .contentEquals("me.itstautvydas.uuidswapper.annotation.RequiredProperty"));
+
                     classInfo.fields.add(new FieldInfo(
                             prefix + name,
                             applyPlaceholders(description),
                             sections,
                             fieldType,
-                            defaultAnnotation != null ? defaultAnnotation.value() : null
+                            defaultAnnotation != null ? defaultAnnotation.value() : null,
+                            isRequired
                     ));
                 }
 
@@ -187,12 +207,25 @@ public class ReadMeProcessor extends AbstractProcessor {
         var extraFields = type.getAnnotation(ReadMeExtraFields.class);
         if (extraFields != null) {
             for (int i = 0; i < extraFields.value().length; i += 3) {
+                var value = extraFields.value()[i];
+                var options = new HashMap<String, String>();
+                if (value.contains(";")) {
+                    var parts = value.split(";");
+                    for (int j = 1; j < parts.length; j++) {
+                        var part = parts[j];
+                        var entry = part.split("=", 2);
+                        if (entry.length == 2)
+                            options.put(entry[0], entry[1]);
+                    }
+                    value = parts[0];
+                }
                 classInfo.fields.add(new FieldInfo(
-                        prefix + extraFields.value()[i],
+                        prefix + value,
                         applyPlaceholders(extraFields.value()[i + 1]),
                         null,
                         extraFields.value()[i + 2],
-                        null
+                        options.get("default"),
+                        options.getOrDefault("required", "false").equals("true")
                 ));
             }
         }
@@ -202,7 +235,28 @@ public class ReadMeProcessor extends AbstractProcessor {
 
     private String applyPlaceholders(String string) {
         if (string == null || string.isBlank()) return string;
-        return string.replace("{current_time}", String.valueOf(System.currentTimeMillis()));
+        long current = System.currentTimeMillis();
+        long fileTime;
+        try {
+            fileTime = Files.getLastModifiedTime(
+                    Paths.get(filer.getResource(StandardLocation.CLASS_OUTPUT, "", outputFileName).toUri())
+            ).toMillis();
+        } catch (Exception ex) {
+            fileTime = current;
+        }
+
+        for (int i = 1; true; i++) {
+            var placeholder = i > 1 ? "{file_time_based_uuid" + i + "}" : "{file_time_based_uuid}";
+            if (!string.contains(placeholder))
+                break;
+            string = string.replace(placeholder, UUID.nameUUIDFromBytes(
+                    ByteBuffer.allocate(Long.BYTES).putLong(fileTime + i).array()).toString()
+            );
+        }
+
+        return string
+                .replace("{file_time}", String.valueOf(fileTime))
+                .replace("{current_time}", String.valueOf(current));
     }
 
     @Override
@@ -222,7 +276,7 @@ public class ReadMeProcessor extends AbstractProcessor {
         if (env.processingOver() && !classes.isEmpty()) {
             String markdown = renderMarkdown();
             try {
-                var file = filer.createResource(StandardLocation.CLASS_OUTPUT, "", "ConfigurationDocs.generated.md");
+                var file = filer.createResource(StandardLocation.CLASS_OUTPUT, "", outputFileName);
                 try (Writer w = file.openWriter()) {
                     w.write(markdown);
                 }
@@ -243,6 +297,32 @@ public class ReadMeProcessor extends AbstractProcessor {
                         LinkedHashMap::new
                 ));
         var builder = new StringBuilder();
+
+        if (rawConfigurationPath != null) {
+            Path pathToRawConfig = null;
+            try {
+                pathToRawConfig = Paths.get(rawConfigurationPath);
+                if (Files.exists(pathToRawConfig)) {
+                    var rawConfiguration = Files.readString(pathToRawConfig);
+                    builder.append("# Default configuration file contents\n\n");
+                    builder.append("<details>\n");
+                    builder.append("<summary>Click to reveal</summary>\n\n```json\n");
+                    builder.append(rawConfiguration);
+                    builder.append("\n```\n");
+                    builder.append("</details>\n\n");
+                }
+            } catch (Exception ex) {
+                System.err.println("Could not read configuration file: " + ex.getMessage());
+                if (pathToRawConfig != null) {
+                    System.err.println("Path: " + pathToRawConfig.toAbsolutePath());
+                } else {
+                    System.err.println("Path with errors: " + rawConfigurationPath);
+                }
+            }
+        }
+
+        builder.append("**! Options with prefixed star (\\*) are required !**\n\n");
+
         var first = true;
         for (Map.Entry<TypeElement, ClassInfo> entry : sortedClasses.entrySet()) {
             ClassInfo classInfo = entry.getValue();
@@ -258,67 +338,71 @@ public class ReadMeProcessor extends AbstractProcessor {
                 builder.append(classInfo.description).append("\n\n");
 
             if (!classInfo.fields.isEmpty()) {
-                var mpl = optionName.length();
-                var mdl = descriptionName.length();
-                var dl = 0;
+                var optTitleNameLength = optionName.length();
+                var optDescNameLength = descriptionName.length();
+                var optDefaultValueLength = 0;
 
                 // Find max option and description lengths
                 for (FieldInfo fieldInfo : classInfo.fields) {
                     if (fieldInfo.defaultValue != null) {
-                        if (dl == 0) {
-                            dl = defaultName.length();
-                        }
-                        dl = Math.max(dl, fieldInfo.defaultValue.length());
+                        if (optDefaultValueLength == 0)
+                            optDefaultValueLength = defaultName.length();
+                        optDefaultValueLength = Math.max(optDefaultValueLength, fieldInfo.defaultValue.length());
                     }
-                    mpl = Math.max(mpl, fieldInfo.option.length());
+                    if (fieldInfo.required)
+                        optTitleNameLength = Math.max(optTitleNameLength, fieldInfo.option.length() + optionRequiredPrefix.length());
+                    else
+                        optTitleNameLength = Math.max(optTitleNameLength, fieldInfo.option.length());
                     if (!disableDescriptions)
-                        mdl = Math.max(mdl, fieldInfo.description.length());
+                        optDescNameLength = Math.max(optDescNameLength, fieldInfo.description.length());
                     if (fieldInfo.linkToSections != null) {
                         if (fieldInfo.linkToSections.size() == 1) {
                             var sectionName = getSectionToLinkTo(fieldInfo, 0);
                             if (sectionName != null)
-                                mpl += sectionName.length() + 5; // [](#) symbols count
+                                optTitleNameLength += sectionName.length() + 5; // [](#) symbols count
                         } else { // Multiple sections
-                            mdl += 3; // a space and ()
+                            optDescNameLength += 3; // a space and ()
                             var it = fieldInfo.linkToSections.iterator();
                             for (int i = 0; it.hasNext(); i++) {
                                 var section = it.next();
                                 var sectionName = getSectionToLinkTo(fieldInfo, i);
                                 if (sectionName == null)
                                     continue;
-                                mdl += sectionName.length() + section.getSimpleName().length() + 5; // [](#) symbols count
+                                optDescNameLength += sectionName.length() + section.getSimpleName().length() + 5; // [](#) symbols count
                                 if (it.hasNext())
-                                    mdl += 2; // comma and a space
+                                    optDescNameLength += 2; // comma and a space
                             }
                         }
                     }
                 }
 
-                var fieldOptionName = applySpaces(optionName, mpl);
-                var fieldDescName = applySpaces(descriptionName, mdl);
-                var fieldDefName = applySpaces(defaultName, dl);
+                var fieldOptionName = applySpaces(optionName, optTitleNameLength);
+                var fieldDescName = applySpaces(descriptionName, optDescNameLength);
+                var fieldDefName = applySpaces(defaultName, optDefaultValueLength);
 
                 builder.append("| ").append(fieldOptionName).append(" |");
                 if (!disableDescriptions)
                     builder.append(' ').append(fieldDescName).append(" |");
-                if (dl != 0)
+                if (optDefaultValueLength != 0)
                     builder.append(' ').append(fieldDefName).append(" |");
                 builder.append('\n');
-                builder.append("|-").append("-".repeat(mpl)).append("-|");
+                builder.append("|-").append("-".repeat(optTitleNameLength)).append("-|");
                 if (!disableDescriptions)
-                    builder.append('-').append("-".repeat(mdl)).append("-|");
-                if (dl != 0)
-                    builder.append('-').append("-".repeat(dl)).append("-|");
+                    builder.append('-').append("-".repeat(optDescNameLength)).append("-|");
+                if (optDefaultValueLength != 0)
+                    builder.append('-').append("-".repeat(optDefaultValueLength)).append("-|");
                 builder.append('\n');
                 for (FieldInfo fieldInfo : classInfo.fields) {
                     var option = classInfo.prefix + fieldInfo.option;
+                    if (fieldInfo.required)
+                        option = optionRequiredPrefix + option;
                     builder.append("| ");
                     if (fieldInfo.linkToSections != null && fieldInfo.linkToSections.size() == 1) { // Only one section
                         var sectionName = getSectionToLinkTo(fieldInfo, 0);
                         if (sectionName != null)
-                            builder.append(applySpaces("[" + option + "](#" + sectionName + ")", mpl));
+                            builder.append(applySpaces("[" + option + "](#" + sectionName + ")", optTitleNameLength));
                     } else {
-                        builder.append(applySpaces(option, mpl));
+                        builder.append(applySpaces(option, optTitleNameLength));
                     }
                     if (!disableDescriptions) {
                         var description = new StringBuilder(fieldInfo.description.replace("|", "\\|"));
@@ -337,11 +421,11 @@ public class ReadMeProcessor extends AbstractProcessor {
                             }
                             description.append(')');
                         }
-                        builder.append(applySpaces(description.toString(), mdl));
+                        builder.append(applySpaces(description.toString(), optDescNameLength));
                     }
-                    if (dl != 0) {
+                    if (optDefaultValueLength != 0) {
                         builder.append(" | ");
-                        builder.append(applySpaces(fieldInfo.defaultValue, dl));
+                        builder.append(applySpaces(fieldInfo.defaultValue, optDefaultValueLength));
                     }
                     builder.append(" |\n");
                 }
@@ -380,6 +464,6 @@ public class ReadMeProcessor extends AbstractProcessor {
     }
 
     private record FieldInfo(String option, String description, List<TypeElement> linkToSections, String className,
-                             String defaultValue) {
+                             String defaultValue, boolean required) {
     }
 }

@@ -61,14 +61,27 @@ tasks.withType(JavaCompile).configureEach {
 
 // Configuration docs processing
 sourceSets {
+    annotations {
+        java.srcDir 'src/annotations/java'
+    }
     processor {
         java.srcDir 'src/processor/java'
         resources.srcDir 'src/processor/resources'
+
+        compileClasspath += sourceSets.annotations.output
+        runtimeClasspath += sourceSets.annotations.output
     }
     main {
         compileClasspath += sourceSets.processor.output
-        runtimeClasspath  += sourceSets.processor.output
+        runtimeClasspath += sourceSets.processor.output
+
+        compileClasspath += sourceSets.annotations.output
+        runtimeClasspath += sourceSets.annotations.output
     }
+}
+
+tasks.named("jar") {
+    from(sourceSets.annotations.output)
 }
 
 configurations {
@@ -82,6 +95,12 @@ dependencies {
     processorImplementation "com.google.auto.service:auto-service-annotations:1.1.1"
     processorAnnotationProcessor "com.google.auto.service:auto-service:1.1.1"
     annotationProcessor files(sourceSets.processor.output)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += [
+            "-Aconfigdoc.rawConfigurationPath=${projectDir}/src/main/resources/configuration.json"
+    ]
 }
 
 tasks.named('compileProcessorJava') {
