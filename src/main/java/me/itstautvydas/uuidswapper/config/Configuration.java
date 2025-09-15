@@ -32,6 +32,7 @@ public class Configuration {
     @ReadMeDescription("This only works on paper and velocity!")
     public static class PaperConfiguration {
         @ReadMeDescription("Should plugin use Paper's MiniMessages (color codes with `&` won't work if this is enabled)")
+        @ReadMeDefault("false")
         protected boolean useMiniMessages;
     }
 
@@ -41,12 +42,15 @@ public class Configuration {
     public static class DatabaseConfiguration {
         @RequiredProperty
         @ReadMeDescription("Should database be enabled")
+        @ReadMeDefault("false")
         protected boolean enabled;
         @RequiredProperty @SerializedName("driver")
         @ReadMeDescription("Which driver to use from `drivers` array")
+        @ReadMeDefault("SQLite")
         protected String driverName;
         @SerializedName("debug")
         @ReadMeDescription("Should debug message to console be enabled (shows when connection was open/close etc.)")
+        @ReadMeDefault("false")
         protected boolean debugEnabled;
         @ReadMeDescription("Defined drivers implementations")
         @ReadMeLinkTo({
@@ -73,33 +77,40 @@ public class Configuration {
         @ReadMeDescription("Should online authentication be enabled")
         protected boolean enabled;
         @ReadMeDescription("Should offline players be allowed on online/secure server (Velocity/BungeeCord only)")
+        @ReadMeDefault("false")
         protected boolean allowOfflinePlayers;
-        @RequiredProperty @SerializedName("use-service")
+        @RequiredProperty
+        @SerializedName("use-service")
         @ReadMeDescription("Which service to use")
         protected String serviceName;
         @RequiredProperty
         @ReadMeDescription("Which services to use next (in order) if above one fails (`array`)")
         protected LinkedHashSet<String> fallbackServices;
         @ReadMeDescription("For how much time should last used successful service be remembered")
+        @ReadMeDefault("21600")
         protected long fallbackServiceRememberTime = 21600;
         @ReadMeDescription("Max timeout for all requests summed up (-1 to disable)")
+        @ReadMeDefault("6000")
         protected long maxTimeout = 6000;
         @ReadMeDescription("Min timeout for a single request (0 to disable)")
+        @ReadMeDefault("1000")
         protected long minTimeout = 1000;
         @ReadMeDescription("Check if player connects with online UUID (skips service requests). This works by comparing generated offline UUID to player's UUID")
+        @ReadMeDefault("true")
         protected boolean checkForOnlineUniqueId = true;
         @ReadMeDescription("Send plugin messages to console (e.g., when successfully fetched)")
+        @ReadMeDefault("true")
         protected boolean sendMessagesToConsole = true;
         @ReadMeDescription("Send plugin error messages")
+        @ReadMeDefault("true")
         protected boolean sendErrorMessagesToConsole = true;
         @ReadMeDescription("How much time to wait (milliseconds) before requesting already used service")
+        @ReadMeDefault("5000")
         protected long serviceConnectionThrottle = 5000;
         @RequiredProperty
         @ReadMeDescription("Connection throttled disconnect message")
+        @ReadMeDefault("null")
         protected String serviceConnectionThrottledMessage;
-        @RequiredProperty
-        @ReadMeDescription("Cache configuration")
-        protected CachingConfiguration caching;
         @RequiredProperty
         @ReadMeDescription("Everything that is defined here will be copied over all services (unless some service override that value)")
         protected DefaultServiceConfiguration serviceDefaults;
@@ -127,72 +138,74 @@ public class Configuration {
     }
 
     @ToString @Getter
-    @ReadMeTitle("Service Cache Options")
-    @ReadMeDescription("Fetched player data caching")
-    public static class CachingConfiguration {
-        @RequiredProperty
-        @ReadMeDescription("Should fetched data be saved")
-        protected boolean enabled;
-        @ReadMeDescription("Player data expiration time (minutes)")
-        protected long keepTime = 7200;
-    }
-
-    @ToString @Getter
     @ReadMeTitle("Default Service Options")
     @ReadMeDescription("Whatever is defined in this section is also going to be available in [service's configuration](#service-configuration).")
     public static class DefaultServiceConfiguration extends RateLimitable {
         @ReadMeDescription("Request method to use (GET or POST)")
+        @ReadMeDefault("GET")
         protected String requestMethod;
-        @ReadMeDescription("Disconnect message when service failed to get UUID from specified JSON path")
-        protected String badUniqueIdDisconnectMessage;
+        @ReadMeDescription("Expected status code from service's endpoint")
+        @ReadMeDefault("200")
+        protected Integer expectStatusCode;
         @ReadMeDescription("Default disconnect message")
+        @ReadMeDefault("null")
         protected String defaultDisconnectMessage;
+        @ReadMeDescription("Disconnect message when service failed to get UUID from specified JSON path")
+        @ReadMeDefault("null")
+        protected String badUniqueIdDisconnectMessage;
         @ReadMeDescription("Unknown connection error disconnect message")
+        @ReadMeDefault("null")
         protected String connectionErrorDisconnectMessage;
         @ReadMeDescription("Unexpected request's returned status code disconnect message")
+        @ReadMeDefault("null")
         protected String badStatusDisconnectMessage;
         @ReadMeDescription("Internal unknown/overlooked error disconnect message")
+        @ReadMeDefault("null")
         protected String unknownErrorDisconnectMessage;
         @ReadMeDescription("Service timed-out disconnect message")
+        @ReadMeDefault("null")
         protected String timeoutDisconnectMessage;
         @ReadMeDescription("Service rate limited disconnect message")
+        @ReadMeDefault("null")
         protected String rateLimitedDisconnectMessage;
         @ReadMeDescription("Failed to get properties disconnect message")
+        @ReadMeDefault("null")
         protected String propertiesFailedDisconnectMessage;
+        @ReadMeDescription("Custom disconnect messages `(key -> value)` based on returned service's status code")
+        @ReadMeDefault("Empty")
+        protected Map<String, Object> customStatusCodeDisconnectMessages;
         @ReadMeDescription("Max request per minute for the service")
         protected Integer maxRequestsPerMinute;
-        @ReadMeDescription("Expected status code from service's endpoint")
-        protected Integer expectStatusCode;
         @ReadMeDescription("Service's time-out time in milliseconds")
         protected long timeout;
-        @Getter(AccessLevel.NONE)
-        @ReadMeDescription("Should service's fetched player data be cached?")
-        protected Boolean allowCaching;
+        @ReadMeDescription("Should service's fetched player data be cached in database (if enabled)")
+        @ReadMeDefault("true")
+        protected Boolean allowDatabaseCaching;
         @Getter(AccessLevel.NONE)
         @ReadMeDescription("Should properties be required (disconnect otherwise)")
+        @ReadMeDefault("false")
         protected Boolean requireProperties;
         @ReadMeDescription("Custom placeholders `(key -> value)` to use in disconnect messages and response handlers")
         protected Map<String, Object> customPlaceholders;
-        @ReadMeDescription("Custom disconnect messages `(key -> value)` based on returned service's status code")
-        protected Map<String, Object> customStatusCodeDisconnectMessages;
         @SerializedName("debug") @Getter(AccessLevel.NONE)
         @ReadMeDescription("Should debug messages to console be enabled")
+        @ReadMeDefault("false")
         protected Boolean debugEnabled;
         @ReadMeDescription("On which circumstances should next (fallback) service be used")
+        @ReadMeDefault("Empty")
         protected LinkedHashSet<FallbackUsage> useFallbacks;
         @ReadMeDescription("Post `(key -> value)` data for service's request to the endpoint")
+        @ReadMeDefault("Empty")
         protected Map<String, String> postData;
         @ReadMeDescription("Query `(key -> value)` data for service's request to the endpoint")
+        @ReadMeDefault("Empty")
         protected Map<String, String> queryData;
         @ReadMeDescription("Headers `(key -> value)` for service's request to the endpoint")
+        @ReadMeDefault("Empty")
         protected Map<String, String> headers;
 
         public boolean isDebugEnabled() {
             return Boolean.TRUE.equals(debugEnabled);
-        }
-
-        public boolean isAllowCaching() {
-            return Boolean.TRUE.equals(allowCaching);
         }
 
         public boolean isRequireProperties() {
@@ -205,6 +218,7 @@ public class Configuration {
     @ReadMeDescription("A service is used for fetching player's data.")
     public static class ServiceConfiguration extends DefaultServiceConfiguration implements PostProcessable {
         @ReadMeDescription("Should this service be enabled")
+        @ReadMeDefault("true")
         protected boolean enabled = true;
         @RequiredProperty
         @ReadMeDescription("Name for the service that can be used in `use-service` or `fallback-services`")
@@ -213,13 +227,17 @@ public class Configuration {
         @ReadMeDescription("Endpoint to where request should be sent")
         protected String endpoint;
         @ReadMeDescription("JSON path to player's unique ID (support dashless UUIDs too), leave empty if response is suppose to be text only")
+        @ReadMeDefault("null")
         protected String jsonPathToUuid;
         @ReadMeDescription("JSON path to player's properties")
+        @ReadMeDefault("null")
         protected String jsonPathToProperties;
         @ReadMeDescription("Which services should be used for fetching player's properties, `json-path-to-properties` is also included if defined")
+        @ReadMeDefault("Empty")
         protected LinkedHashSet<String> requestServicesForProperties = new LinkedHashSet<>();
         @ReadMeDescription("Custom response handlers")
         @ReadMeLinkTo(ResponseHandlerConfiguration.class)
+        @ReadMeDefault("Empty")
         protected List<ResponseHandlerConfiguration> responseHandlers = new ArrayList<>();
 
         public void setDefaults(DefaultServiceConfiguration service) {
@@ -233,7 +251,7 @@ public class Configuration {
             this.rateLimitedDisconnectMessage = defaultValue(rateLimitedDisconnectMessage, service.rateLimitedDisconnectMessage, null);
             this.propertiesFailedDisconnectMessage = defaultValue(propertiesFailedDisconnectMessage, service.propertiesFailedDisconnectMessage, null);
             this.expectStatusCode = defaultValue(expectStatusCode, service.expectStatusCode, 200);
-            this.allowCaching = defaultValue(allowCaching, service.allowCaching, true);
+            this.allowDatabaseCaching = defaultValue(allowDatabaseCaching, service.allowDatabaseCaching, true);
             this.requireProperties = defaultValue(requireProperties, service.requireProperties, false);
             this.debugEnabled = defaultValue(debugEnabled, service.debugEnabled, false);
             this.useFallbacks = defaultValue(useFallbacks, service.useFallbacks, new LinkedHashSet<>());
@@ -296,6 +314,7 @@ public class Configuration {
     public static class ResponseHandlerConfiguration implements PostProcessable {
         @RequiredProperty
         @ReadMeDescription("In which order should this response handler be executed (ascending)")
+        @ReadMeDefault("9999")
         protected long order = 9999;
         @RequiredProperty
         @ReadMeDescription("""
@@ -310,25 +329,35 @@ public class Configuration {
         protected ServiceStateEvent event;
         @ReadMeDescription("Should the player be allowed to join (this is forceful option, meaning if it's true, no matter " +
                 "what, the player will be able to join, if false - instant disconnect, null - allow plugin to decide internally)")
+        @ReadMeDefault("null")
         protected Boolean allowPlayerToJoin;
         @ReadMeDescription("Should properties be applied for the player")
-        protected boolean applyProperties;
+        @ReadMeDefault("true")
+        protected boolean applyProperties = true;
         @ReadMeDescription("Should properties be required to be requested and applied (disconnect if no properties or fallback could be used)")
+        @ReadMeDefault("null")
         protected Boolean requireProperties;
         @ReadMeDescription("Custom disconnect message if `allow-player-to-join` is set to false")
+        @ReadMeDefault("null")
         protected String disconnectMessage;
         @ReadMeDescription("Send custom message to console (extra debugging?)")
+        @ReadMeDefault("null")
         protected String messageToConsole;
         @ReadMeDescription("Message type to send to console (INFO/WARNING/ERROR)")
+        @ReadMeDefault("INFO")
         protected ConsoleMessageType consoleMessageType;
-        @ReadMeDescription("Message type to send to console (AND / OR), default is AND")
+        @ReadMeDescription("Message type to send to console (AND / OR)")
+        @ReadMeDefault("AND")
         protected ConditionsMode conditionsMode;
         @ReadMeDescription("Should conditions ignore placeholder value casing")
+        @ReadMeDefault("false")
         protected boolean ignoreConditionsCase;
         @ReadMeDescription("When comparing, should placeholder's value and specified value be converted to string for comparison")
+        @ReadMeDefault("false")
         protected boolean forceStringOnConditions;
         @ReadMeDescription("Conditions (placeholder -> value) to check if response handler should be executed. Note that not everything can be a text (in \"\" quotes), " +
                 "comparison is done checking if both objects are equal,\nor if you really want simplicity, enable above setting")
+        @ReadMeDefault("Empty")
         protected Map<String, Object> conditions;
 
         public boolean testConditions(Map<String, Object> placeholders) {
@@ -424,7 +453,7 @@ public class Configuration {
             protected boolean save;
             @RequiredProperty
             @ReadMeDescription("When should saved unique ID expire (seconds)")
-            protected boolean expire;
+            protected long expire;
         }
 
         @ToString(callSuper = true) @Getter
@@ -497,28 +526,35 @@ public class Configuration {
             `{command}` - command name
             `{prefix}` - prefix defined in `prefix`""")
     public static class CommandMessagesConfiguration {
-        @RequiredProperty @ReadMeDescription("Command's prefix")
+        @RequiredProperty
+        @ReadMeDescription("Command's prefix")
         protected String prefix;
-        @RequiredProperty @ReadMeDescription("Message when no arguments")
+        @RequiredProperty
+        @ReadMeDescription("Message when no arguments")
         protected String noArguments;
-        @RequiredProperty @ReadMeDescription("Message when reload was successful. Available placeholders:\n" +
+        @RequiredProperty
+        @ReadMeDescription("Message when reload was successful. Available placeholders:\n" +
                 "`{took}` - how many milliseconds took to ")
         protected String reloadSuccess;
-        @RequiredProperty @ReadMeDescription("Message when database driver failed to load. Available placeholders:\n" +
+        @RequiredProperty
+        @ReadMeDescription("Message when database driver failed to load. Available placeholders:\n" +
                 "`{driver}` - driver's name that failed to load")
         protected String reloadDatabaseDriverFailed;
-        @RequiredProperty @ReadMeDescription("""
+        @RequiredProperty
+        @ReadMeDescription("""
                 Message when plugin failed to reload. Available placeholders:
                 `{error.class}` - exception's full (with package) class
                 `{error.class-name}` - exception's class name
                 `{error.message}` - exception's message""")
         protected String reloadFailed;
-        @RequiredProperty @ReadMeDescription("""
+        @RequiredProperty
+        @ReadMeDescription("""
                 Message when player successfully pretends to be another player on next server join. Available placeholders:
                 `{new_username}` - player's new username
                 `{new_uuid}` - player's new unique ID""")
         protected String playerPretendSuccess;
-        @RequiredProperty @ReadMeDescription("Message when plugin wasn't able to fake another player")
+        @RequiredProperty
+        @ReadMeDescription("Message when plugin wasn't able to fake another player")
         protected String playerPretendFailed;
     }
 
