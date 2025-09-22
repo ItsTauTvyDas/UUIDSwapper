@@ -31,14 +31,12 @@ public abstract class DriverImplementation implements PostProcessable, Jsonable 
     public static final String UPDATED_AT = "updated_at";
 
     public static final String ONLINE_UUID_CACHE_TABLE = "online_uuid_cache";
-    public static final String ONLINE_UUID_CACHE_ORIGINAL_UUID = "original_uuid";
-    public static final String ONLINE_UUID_CACHE_ONLINE_UUID = "online_uuid";
-    public static final String ONLINE_UUID_CACHE_PROPERTIES = "properties";
-
     public static final String RANDOM_PLAYER_CACHE_TABLE = "random_player";
-    public static final String RANDOM_PLAYER_CACHE_ORIGINAL_UUID = "original_uuid";
-    public static final String RANDOM_PLAYER_CACHE_USERNAME = "username";
-    public static final String RANDOM_PLAYER_CACHE_UUID = "uuid";
+
+    public static final String KEY_OVERWRITE_UUID = "modified_uuid";
+    public static final String KEY_USERNAME = "username";
+    public static final String KEY_ORIGINAL_UUID = "uuid";
+    public static final String KEY_PROPERTIES = "properties";
 
     @RequiredProperty
     @SerializedName("name")
@@ -146,10 +144,9 @@ public abstract class DriverImplementation implements PostProcessable, Jsonable 
 
     public abstract void storeOnlinePlayerCache(OnlinePlayerData player) throws Exception;
     public abstract OnlinePlayerData getOnlinePlayerCache(UUID uuid) throws Exception;
-
     public abstract List<OnlinePlayerData> getOnlinePlayersCache() throws Exception;
-    public abstract List<PlayerData> getRandomPlayersCache() throws Exception;
 
     public abstract void storeRandomPlayerCache(PlayerData player) throws Exception;
     public abstract PlayerData getRandomPlayerCache(UUID uuid) throws Exception;
+    public abstract List<PlayerData> getRandomPlayersCache() throws Exception;
 }

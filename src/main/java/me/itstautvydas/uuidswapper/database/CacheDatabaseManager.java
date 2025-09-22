@@ -128,23 +128,6 @@ public class CacheDatabaseManager {
         };
     }
 
-    public DatabaseObject<PlayerData> getRandomPlayerCache(UUID uuid) {
-        PlayerData data = null;
-        Exception exception = null;
-        try {
-            data = driver.getRandomPlayerCache(uuid);
-        } catch (Exception ex) {
-            exception = ex;
-        }
-        return new DatabaseObject<>(data, exception, driver, uuid) {
-            @Override
-            public DatabaseObject<PlayerData> printErrorIfAny() {
-                driver.error("Failed to get random player data (%s) from the database", exception, key);
-                return this;
-            }
-        };
-    }
-
     public DatabaseObject<OnlinePlayerData> getOnlinePlayerCache(UUID uuid) {
         OnlinePlayerData data = null;
         Exception exception = null;
@@ -157,6 +140,23 @@ public class CacheDatabaseManager {
             @Override
             public DatabaseObject<OnlinePlayerData> printErrorIfAny() {
                 driver.error("Failed to get online player data (%s) from the database", exception, key);
+                return this;
+            }
+        };
+    }
+
+    public DatabaseObject<PlayerData> getRandomPlayerCache(UUID uuid) {
+        PlayerData data = null;
+        Exception exception = null;
+        try {
+            data = driver.getRandomPlayerCache(uuid);
+        } catch (Exception ex) {
+            exception = ex;
+        }
+        return new DatabaseObject<>(data, exception, driver, uuid) {
+            @Override
+            public DatabaseObject<PlayerData> printErrorIfAny() {
+                driver.error("Failed to get random player data (%s) from the database", exception, key);
                 return this;
             }
         };

@@ -11,23 +11,33 @@ import java.util.Objects;
 import java.util.UUID;
 
 @ToString @Getter @Setter
-public class OnlinePlayerData implements Jsonable, Queueable {
+public class OnlinePlayerData extends Timeable implements Jsonable, Queueable {
     private final UUID originalUniqueId;
     private UUID uniqueId;
     private List<ProfilePropertyWrapper> properties;
-    private Long createdAt;
-    private Long updatedAt;
 
     public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfilePropertyWrapper> properties) {
+        super(0, 0);
         this.originalUniqueId = originalUniqueId;
         this.uniqueId = onlineUniqueId;
         this.properties = properties;
     }
 
-    public OnlinePlayerData updateTime(Long createdAt, Long updatedAt) {
-        this.createdAt = createdAt == null ? System.currentTimeMillis() : createdAt;
-        this.updatedAt = updatedAt == null ? (createdAt == null ? System.currentTimeMillis() : createdAt) : updatedAt;
-        return this;
+    public OnlinePlayerData(UUID originalUniqueId, UUID onlineUniqueId, List<ProfilePropertyWrapper> properties, Timeable time) {
+        super(time == null ? 0 : time.getCreatedAt(), time == null ? 0 : time.getUpdatedAt());
+        this.originalUniqueId = originalUniqueId;
+        this.uniqueId = onlineUniqueId;
+        this.properties = properties;
+    }
+
+    public PlayerData toPlayerData(String username) {
+        return new PlayerData(
+                originalUniqueId,
+                uniqueId,
+                username,
+                properties,
+                this
+        );
     }
 
     public boolean isOnlineUniqueId() {
@@ -36,11 +46,5 @@ public class OnlinePlayerData implements Jsonable, Queueable {
 
     public UUID getUniqueId() {
         return uniqueId == null ? originalUniqueId : uniqueId;
-    }
-
-    public PlayerData toSimpleData(String username) {
-        var data = new PlayerData(originalUniqueId, username, uniqueId);
-        data.setProperties(properties);
-        return data;
     }
 }

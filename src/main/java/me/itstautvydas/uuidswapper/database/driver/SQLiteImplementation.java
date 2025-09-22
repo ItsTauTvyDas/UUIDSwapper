@@ -1,5 +1,6 @@
 package me.itstautvydas.uuidswapper.database.driver;
 
+import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import lombok.Getter;
 import me.itstautvydas.uuidswapper.Utils;
@@ -13,6 +14,7 @@ import me.itstautvydas.uuidswapper.database.ScheduledSavingDriverImplementation;
 import me.itstautvydas.uuidswapper.processor.ReadMeCallSuperClass;
 import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
 import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
+import org.jetbrains.annotations.NotNull;
 
 import java.nio.file.Path;
 import java.sql.*;
@@ -22,7 +24,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-@SuppressWarnings({"SqlNoDataSourceInspection", "unused", "FieldMayBeFinal"}) // SHUSH
+@SuppressWarnings({"SqlNoDataSourceInspection", "FieldMayBeFinal"}) // SHUSH
 @Getter
 @ReadMeTitle(value = "(Database Driver) SQLite Implementation", order = -997)
 @ReadMeDescription("SQLite (JDBC) file-based driver to use for caching player data. The driver is not bundled with the plugin but you have the ability to automatically download it and load it.")
@@ -128,32 +130,28 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
     }
 
     private PlayerData toRandomPlayerData(ResultSet resultSet) throws SQLException {
-        return new PlayerData(
-                UUID.fromString(resultSet.getString(RANDOM_PLAYER_CACHE_ORIGINAL_UUID)),
-                resultSet.getString(RANDOM_PLAYER_CACHE_USERNAME),
-                UUID.fromString(resultSet.getString(RANDOM_PLAYER_CACHE_UUID))
-        );
+        return toOnlinePlayerData(resultSet).toPlayerData(resultSet.getString(KEY_USERNAME));
     }
 
-    @SuppressWarnings("unchecked")
     private OnlinePlayerData toOnlinePlayerData(ResultSet resultSet) throws SQLException {
-        var properties = resultSet.getString(ONLINE_UUID_CACHE_PROPERTIES);
+        var properties = resultSet.getString(KEY_PROPERTIES);
         return new OnlinePlayerData(
-                UUID.fromString(resultSet.getString(ONLINE_UUID_CACHE_ORIGINAL_UUID)),
-                UUID.fromString(resultSet.getString(ONLINE_UUID_CACHE_ONLINE_UUID)),
-                properties == null ? null : (List<ProfilePropertyWrapper>) Utils.DEFAULT_GSON.fromJson(
+                UUID.fromString(resultSet.getString(KEY_ORIGINAL_UUID)),
+                UUID.fromString(resultSet.getString(KEY_OVERWRITE_UUID)),
+                properties == null ? null : Utils.DEFAULT_GSON.fromJson(
                         properties,
-                        List.class
+                        new TypeToken<@NotNull List<ProfilePropertyWrapper>>(){}.getType()
                 )
-        ).updateTime(resultSet.getLong(CREATED_AT), resultSet.getLong(UPDATED_AT));
+        );
     }
 
     @Override
     public void createOnlineUuidCacheTable() throws Exception {
         try (var connection = createConnection(); var stmt = connection.createStatement()) {
             stmt.execute("CREATE TABLE IF NOT EXISTS " + ONLINE_UUID_CACHE_TABLE + " ("
-                    + ONLINE_UUID_CACHE_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
-                    + ONLINE_UUID_CACHE_ONLINE_UUID + " TEXT NOT NULL, "
+                    + KEY_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
+                    + KEY_OVERWRITE_UUID + " TEXT NOT NULL, "
+                    + KEY_PROPERTIES + " TEXT NOT NULL, "
                     + CREATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
                     + UPDATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         }
@@ -163,9 +161,9 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
     public void createRandomizedPlayerDataTable() throws Exception {
         try (var connection = createConnection(); var stmt = connection.createStatement()) {
             stmt.execute("CREATE TABLE IF NOT EXISTS " + RANDOM_PLAYER_CACHE_TABLE + " ("
-                    + RANDOM_PLAYER_CACHE_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
-                    + RANDOM_PLAYER_CACHE_UUID + " TEXT NULL, "
-                    + RANDOM_PLAYER_CACHE_USERNAME + " TEXT NULL, "
+                    + KEY_ORIGINAL_UUID + " TEXT NOT NULL PRIMARY KEY, "
+                    + KEY_OVERWRITE_UUID + " TEXT NULL, "
+                    + KEY_USERNAME + " TEXT NULL, "
                     + CREATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
                     + UPDATED_AT + " TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         }
@@ -173,7 +171,7 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
 
     @Override
     public OnlinePlayerData getOnlinePlayerCache(UUID originalUniqueId) throws Exception {
-        var sql = "SELECT * FROM " + ONLINE_UUID_CACHE_TABLE + " WHERE " + ONLINE_UUID_CACHE_ORIGINAL_UUID + " = ? LIMIT 1";
+        var sql = "SELECT * FROM " + ONLINE_UUID_CACHE_TABLE + " WHERE " + KEY_ORIGINAL_UUID + " = ? LIMIT 1";
 
         try (var connection = createConnection(); var prepare = connection.prepareStatement(sql)) {
             prepare.setString(1, originalUniqueId.toString());
@@ -211,7 +209,7 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
 
     @Override
     public PlayerData getRandomPlayerCache(UUID originalUniqueId) throws Exception {
-        var sql = "SELECT * FROM " + RANDOM_PLAYER_CACHE_TABLE + " WHERE " + RANDOM_PLAYER_CACHE_ORIGINAL_UUID + " = ? LIMIT 1";
+        var sql = "SELECT * FROM " + RANDOM_PLAYER_CACHE_TABLE + " WHERE " + KEY_ORIGINAL_UUID + " = ? LIMIT 1";
 
         try (var connection = createConnection(); var prepare = connection.prepareStatement(sql)) {
             prepare.setString(1, originalUniqueId.toString());
@@ -230,48 +228,62 @@ public class SQLiteImplementation extends ScheduledSavingDriverImplementation<Co
         return connection;
     }
 
+    @SuppressWarnings("ConstantValue")
     @Override
     public void onBatchCommit(List<Queueable> batch, Connection connection) throws Exception {
-        var groups = new HashMap<String, List<Queueable>>();
-        for (var data : batch) {
+        connection.setAutoCommit(false);
+        Map<String, PreparedStatement> statements = new HashMap<>();
+        for (Queueable data : batch) {
             String sql;
             if (data instanceof PlayerData) {
-                sql = "INSERT OR REPLACE INTO " + RANDOM_PLAYER_CACHE_TABLE + " (" +
-                        RANDOM_PLAYER_CACHE_ORIGINAL_UUID + ", " +
-                        RANDOM_PLAYER_CACHE_UUID + ", " +
-                        RANDOM_PLAYER_CACHE_USERNAME +
-                        ") VALUES (?, ?, ?)";
+                sql = "INSERT OR REPLACE INTO " + RANDOM_PLAYER_CACHE_TABLE + " ("
+                        + KEY_ORIGINAL_UUID + ", "
+                        + KEY_OVERWRITE_UUID + ", "
+                        + KEY_USERNAME + ", "
+                        + KEY_PROPERTIES
+                        + ") VALUES (?, ?, ?, ?)";
             } else if (data instanceof OnlinePlayerData) {
-                sql = "INSERT OR REPLACE INTO " + ONLINE_UUID_CACHE_TABLE + " (" +
-                        ONLINE_UUID_CACHE_ORIGINAL_UUID + ", " +
-                        ONLINE_UUID_CACHE_ONLINE_UUID +
-                        ONLINE_UUID_CACHE_PROPERTIES +
-                        ") VALUES (?, ?, ?)";
-            } else
+                sql = "INSERT OR REPLACE INTO " + ONLINE_UUID_CACHE_TABLE + " ("
+                        + KEY_ORIGINAL_UUID + ", "
+                        + KEY_OVERWRITE_UUID + ", "
+                        + KEY_PROPERTIES
+                        + ") VALUES (?, ?, ?)";
+            } else {
                 continue;
-            groups.computeIfAbsent(sql, k -> new ArrayList<>()).add(data);
-        }
-        for (var entry : groups.entrySet()) {
-            var sql = entry.getKey();
-            var tasks = entry.getValue();
-
-            try (var preparedStatement = connection.prepareStatement(sql)) {
-                for (var data : batch) {
-                    if (data instanceof PlayerData player) {
-                        preparedStatement.setString(1, player.getOriginalUniqueId().toString());
-                        preparedStatement.setString(2, player.getUniqueId().toString());
-                        preparedStatement.setString(3, player.getUsername());
-                        preparedStatement.executeUpdate();
-                    } else if (data instanceof OnlinePlayerData player) {
-                        preparedStatement.setString(1, player.getOriginalUniqueId().toString());
-                        preparedStatement.setString(2, player.getUniqueId().toString());
-                        preparedStatement.setString(3, Utils.DEFAULT_GSON.toJson(player.getProperties()));
-                        preparedStatement.executeUpdate();
-                    }
-                    preparedStatement.addBatch();
-                }
-                preparedStatement.executeBatch();
             }
+
+            PreparedStatement ps = statements.get(sql);
+            if (ps == null) {
+                ps = connection.prepareStatement(sql);
+                statements.put(sql, ps);
+            }
+
+            if (data instanceof PlayerData player) {
+                ps.setString(1, player.getOriginalUniqueId().toString());
+                ps.setString(2, player.getUniqueId().toString());
+                ps.setString(3, player.getUsername());
+                ps.setString(4, Utils.DEFAULT_GSON.toJson(player.getProperties()));
+            } else if (data instanceof OnlinePlayerData player) {
+                ps.setString(1, player.getOriginalUniqueId().toString());
+                ps.setString(2, player.getUniqueId().toString());
+                ps.setString(3, Utils.DEFAULT_GSON.toJson(player.getProperties()));
+            }
+
+            ps.addBatch();
+        }
+
+        for (PreparedStatement ps : statements.values()) {
+            ps.executeBatch();
+            ps.close();
+        }
+
+        try {
+            connection.commit();
+        } catch (Exception ex) {
+            connection.rollback();
+            throw ex;
+        } finally {
+            connection.setAutoCommit(true);
         }
     }
 

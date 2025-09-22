@@ -7,18 +7,14 @@ import me.itstautvydas.uuidswapper.processor.ReadMeCallSuperClass;
 import me.itstautvydas.uuidswapper.processor.ReadMeDescription;
 import me.itstautvydas.uuidswapper.processor.ReadMeTitle;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
-@SuppressWarnings("unused")
 @ReadMeTitle(value = "(Database Driver) Memory Cache Implementation", order = -996)
-@ReadMeDescription("Memory-based driver to use for caching player data. No configuration needed for this.")
+@ReadMeDescription("Memory-based driver to use for caching player data, **be aware that data does not persist between restarts!**")
 @ReadMeCallSuperClass()
 public class MemoryCacheImplementation extends DriverImplementation {
-    private final List<OnlinePlayerData> onlineOnlinePlayerData = new ArrayList<>();
-    private final List<PlayerData> randomPlayerCache = new ArrayList<>();
+    private final Set<OnlinePlayerData> onlineOnlinePlayerData = new HashSet<>();
+    private final Set<PlayerData> randomPlayerCache = new HashSet<>();
 
     @Override
     public boolean init() {
@@ -51,12 +47,12 @@ public class MemoryCacheImplementation extends DriverImplementation {
 
     @Override
     public List<OnlinePlayerData> getOnlinePlayersCache() {
-        return Collections.unmodifiableList(onlineOnlinePlayerData);
+        return List.copyOf(onlineOnlinePlayerData);
     }
 
     @Override
     public List<PlayerData> getRandomPlayersCache() {
-        return Collections.unmodifiableList(randomPlayerCache);
+        return List.copyOf(randomPlayerCache);
     }
 
     @Override
