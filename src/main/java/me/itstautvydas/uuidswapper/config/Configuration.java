@@ -171,7 +171,11 @@ public class Configuration {
         @ReadMeDescription("Failed to get properties disconnect message")
         @ReadMeDefault("null")
         protected String propertiesFailedDisconnectMessage;
-        @ReadMeDescription("Custom disconnect messages `(key -> value)` based on returned service's status code")
+        @ReadMeDescription("""
+                Custom disconnect messages `(key -> value)` based on returned service's status code.
+                For example:
+                `"500": "Failed to get your online UUID because service returned internal error!"`
+                """)
         @ReadMeDefault("Empty")
         protected Map<String, Object> customStatusCodeDisconnectMessages;
         @ReadMeDescription("Max request per minute for the service")
@@ -340,7 +344,7 @@ public class Configuration {
         @ReadMeDescription("Custom disconnect message if `allow-player-to-join` is set to false")
         @ReadMeDefault("null")
         protected String disconnectMessage;
-        @ReadMeDescription("Send custom message to console (extra debugging?)")
+        @ReadMeDescription("Send custom message to console")
         @ReadMeDefault("null")
         protected String messageToConsole;
         @ReadMeDescription("Message type to send to console (INFO/WARNING/ERROR)")

@@ -17,18 +17,19 @@
           "synchronous": "NORMAL"
         },
         "timeout": 5000,
-        "keep-open-time": 10,
-        "timer-repeat-time": 1
+        "save-interval": 10,
+        "max-batch-size": 25
       },
       {
         "name": "JSON",
         "class": "JsonImplementation",
+        "compact": false,
+        "keep-loaded": false,
+        "file": "players-data.json",
         "split": {
           "enabled": false,
-          "file": "player-data/{original-uuid}.json",
-          "compact": false
-        },
-        "file": "players-data.json"
+          "file": "player-data/{uuid}.json"
+        }
       },
       {
         "name": "Memory",
@@ -52,10 +53,6 @@
     "send-error-messages-to-console": true,
     "service-connection-throttle": 5000,
     "service-connection-throttled-message": "UUID service connection throttled, wait {time-left} seconds until you can connect again!",
-    "caching": {
-      "enabled": true,
-      "keep-time": 7200
-    },
     "service-defaults": {
       "expect-status-code": 200,
       "custom-placeholders": {
@@ -74,7 +71,9 @@
       "custom-status-code-disconnect-messages": {},
       "timeout": 3000,
       "debug": false,
-      "allow-caching": true,
+      "allow-database-caching": true,
+      "cache-keep-time": 7200,
+      "cache-in-memory": false,
       "use-fallbacks": [
         "ON_CONNECTION_ERROR",
         "ON_INVALID_UUID",
