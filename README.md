@@ -20,7 +20,7 @@ User [gomadare-androidpotato](https://github.com/gomadare-androidpotato/) has ma
 - [ ] Commands
 - [ ] Online UUID caching (**SQLite**/**Memory**/~~JSON~~) **(almost done)**
   - [x] Automatically download database drivers
-- [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~ (not supported)))
+- [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~ (not supported))
 - Skins
   - [x] Use online skins
   - [ ] Swap skins
@@ -28,6 +28,7 @@ User [gomadare-androidpotato](https://github.com/gomadare-androidpotato/) has ma
 - [ ] Randomize usernames/UUIDs **(almost done)**
 - [ ] ~~Toggle capes/skins~~ (Not possible)
 - [x] Command for changing username or UUID
+- [ ] Use (or implement?) JSONC (JSON with comments) to allow comments in json configuration file
 
 ## Default configuration:
 Configuration is TOML based and resides in `/plugins/uuid-swapper/config.toml`
