@@ -5,6 +5,8 @@ A velocity plugin for swapping player UUIDs or usernames.
 
 Version v1.0.0 was just quickly released because I needed it for my server so it has some unused configuration and maybe even code.
 
+User [gomadare-androidpotato](https://github.com/gomadare-androidpotato/) has made a fork of v1.0.0 that adds features like commands, swapping UUIDs/usernames per server and other features, [check it out here](https://github.com/gomadare-androidpotato/UUIDSwapper)!
+
 ## Finished features
 - [x] Swap UUIDs and usernames
 - [ ] Use online UUIDs
@@ -15,6 +17,7 @@ Version v1.0.0 was just quickly released because I needed it for my server so it
 ## TODO / Currently working on (Unreleased)
 - [x] Online UUIDs
 - [x] Multiple API services for getting online UUID
+- [ ] Commands
 - [ ] Online UUID caching (**SQLite**/**Memory**/~~JSON~~) **(almost done)**
   - [x] Automatically download database drivers
 - [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~ (not supported)))
