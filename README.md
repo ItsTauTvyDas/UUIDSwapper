@@ -3,11 +3,13 @@ A velocity plugin for swapping player UUIDs or usernames.
 
 !!! NOT FINISHED !!!
 
+Version v1.0.0 was jsut fast released because I needed it for my server so it has some unused configuration and maybe even code.
+
 ## Finished features
 - [x] Swap UUIDs and usernames
 - [ ] Use online UUIDs
 
-## Use cases
+## Use cases (as of v1.0.0)
 - When switching from online to offline server mode (no need to transfer user data if it's a small server, you just specify username or offline UUID and set it to online UUID)
 
 ## TODO / Currently working on (Unreleased)
@@ -15,13 +17,13 @@ A velocity plugin for swapping player UUIDs or usernames.
 - [x] Multiple API services for getting online UUID
 - [ ] Online UUID caching (**SQLite**/**Memory**/~~JSON~~) **(almost done)**
   - [x] Automatically download database drivers
-- [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~)
+- [ ] Cross-platform support (BungeeCord, Velocity, Paper/Folia, ~~Spigot~~ (not supported)))
 - Skins
   - [x] Use online skins
   - [ ] Swap skins
-  - [ ] Set default skin (custom skin pack?)
-- [x] Randomize usernames/UUIDs **(almost done)**
-- [ ] Toggle capes/skins
+  - [ ] ~~Set default skin (custom skin pack?)~~ (Not possible)
+- [ ] Randomize usernames/UUIDs **(almost done)**
+- [ ] ~~Toggle capes/skins~~ (Not possible)
 - [x] Command for changing username or UUID
 
 ## Default configuration:
@@ -48,6 +50,8 @@ swap-uuids = true
 #"96642c39-6de2-3b20-a133-b354dcc36016" = "Herobrine"
 #"u:Steve" = "Steve1"
 ```
+
+## [Future WIKI](https://github.com/ItsTauTvyDas/UUIDSwapper/wiki)
 
 ## Future configuration
 ```json
