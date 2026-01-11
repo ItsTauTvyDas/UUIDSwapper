@@ -1,7 +1,7 @@
 # UUIDSwapper
 A velocity plugin for swapping player UUIDs or usernames.
 
-!!! NOT FINISHED !!!
+!!! NOT FINISHED !!! **(I will continue working on this after I finish some important stuff with college)**
 
 Version v1.0.0 was just quickly released because I needed it for my server so it has some unused configuration and maybe even code.
 
